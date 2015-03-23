@@ -6,7 +6,7 @@ For deployment at google computing engine cloud you need the gcloud Tool Guide:
 
 Create a three-instance cluster (GCE project id: cluster-0001):
 ```sh
-$ ./create_machines.sh -p cluster-0001 -n 3
+$ ./create_gce_machines.sh.sh -p cluster-0001 -n 3
 ```
 
 ### DO (Digital Ocean)
@@ -14,5 +14,5 @@ For deployment at digital ocean you need a basic version of python installed:
 
 Create a three-instance cluster:
 ```sh
-$ ./create_machines.sh -t $TOKEN -n 3
+$ ./create_do_machines.sh.sh -t $TOKEN -n 3
 ```
