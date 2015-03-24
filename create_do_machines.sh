@@ -6,7 +6,7 @@ SIZE="512mb"
 NUMBER="3"
 OUTPUT="digital_ocean"
 TOKEN=""
-IMAGE="ubuntu-14-04-x64"
+IMAGE="coreos-stable"
 
 TEST='{"id": "not_found","message": "The resource you were accessing could not be found."}'
 
