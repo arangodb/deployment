@@ -36,6 +36,8 @@ while getopts ":z:m:n:d:p:" opt; do
 done
 
 PREFIX="arangodb-test-$$-"
+declare -a SERVERS_EXTERNAL
+declare -a SERVERS_INTERNAL
 
 echo "ZONE: $ZONE"
 echo "MACHINE_TYPE: $MACHINE_TYPE"
@@ -59,16 +61,21 @@ mkdir "$OUTPUT"
 export CLOUDSDK_CONFIG="$OUTPUT/gce"
 
 gcloud config set account arangodb
-gcloud auth login
 gcloud config set project "$PROJECT"
-
-export USER="arangodb"
+gcloud auth login
 
 ssh-keygen -t dsa -f gce/ssh-key -C "arangodb@arangodb.com" -N ""
 
 function createMachine () {
   echo "creating machine $PREFIX$1"
-  gcloud compute instances create --image ubuntu-14-04 --zone "$ZONE" --machine-type "$MACHINE_TYPE" "$PREFIX$1"
+  INSTANCE=`gcloud compute instances create --image coreos --zone "$ZONE" --machine-type "$MACHINE_TYPE" "$PREFIX$1" | grep "^$PREFIX"`
+
+  a=`echo $INSTANCE | awk '{print $4}'`
+  b=`echo $INSTANCE | awk '{print $5}'`
+
+#  Place for inserting INTERNAL and EXTERNAL IPs
+#  SERVERS_INTERNAL[$1-1]=(eval $a)
+#  SERVERS_EXTERNAL[$1-1]=(eval $b)
 }
 
 CURRENT_USER=`who|awk '{print $1}'`
@@ -84,14 +91,4 @@ done
 
 wait
 
-gcloud compute ssh --ssh-key-file gce/ssh-key --zone "$ZONE" --command /bin/true "arangodb@${PREFIX}1"
-
-#for i in `seq $NUMBER`; do
-#  createUser $i
-#done
-
-wait
-
-wait
-
-gcloud compute instances list | grep "^$PREFIX" | awk '{print $1 "," $4 "," $5}' > $OUTPUT/hosts
+gcloud compute ssh --ssh-flag="-f" --ssh-key-file gce/ssh-key --project "$PROJECT" --zone "$ZONE" --command "/bin/true" "arangodb@${PREFIX}1"
