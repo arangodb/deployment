@@ -73,9 +73,8 @@ function createMachine () {
   a=`echo $INSTANCE | awk '{print $4}'`
   b=`echo $INSTANCE | awk '{print $5}'`
 
-#  Place for inserting INTERNAL and EXTERNAL IPs
-#  SERVERS_INTERNAL[$1-1]=(eval $a)
-#  SERVERS_EXTERNAL[$1-1]=(eval $b)
+  SERVERS_INTERNAL[$1]="$a"
+  SERVERS_EXTERNAL[$1]="$b"
 }
 
 CURRENT_USER=`who|awk '{print $1}'`
@@ -91,4 +90,7 @@ done
 
 wait
 
-gcloud compute ssh --ssh-flag="-f" --ssh-key-file gce/ssh-key --project "$PROJECT" --zone "$ZONE" --command "/bin/true" "arangodb@${PREFIX}1"
+# Have to wait until google deployed keys on all instances.
+sleep 20
+gcloud compute ssh --ssh-key-file gce/ssh-key --project "$PROJECT" --zone "$ZONE" --command "/bin/true" "arangodb@${PREFIX}1"
+
