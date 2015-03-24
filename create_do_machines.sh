@@ -1,15 +1,25 @@
 #!/bin/bash
+
+# This starts multiple coreos instances using digital ocean cloud platform
+#
+# Prerequisites:
+#   TOKEN : digital ocean api-token (as environment variable)
+#
+# Optional prerequisites:
+#   TOKEN : bash array with a list of IP addresses or hostnames
+#                      this must be the network interfaces that are reachable
+#
+
 set -e
 
 REGION="sgp1"
 SIZE="512mb"
 NUMBER="3"
 OUTPUT="digital_ocean"
-TOKEN=""
 IMAGE="coreos-stable"
 SSHID=""
 
-while getopts ":z:m:n:d:t:s:" opt; do
+while getopts ":z:m:n:d:s:" opt; do
   case $opt in
     z)
       REGION="$OPTARG"
@@ -22,9 +32,6 @@ while getopts ":z:m:n:d:t:s:" opt; do
       ;;
     d)
       OUTPUT="$OPTARG"
-      ;;
-    t)
-      TOKEN="$OPTARG"
       ;;
     s)
       SSHID="$OPTARG"
@@ -52,7 +59,7 @@ echo "OUTPUT DIRECTORY: $OUTPUT"
 echo "MACHINE PREFIX: $PREFIX"
 
 if test -z "$TOKEN";  then
-  echo "$0: you must supply a project with '-t'"
+  echo "$0: you must supply a token as environment variable with 'export TOKEN='your_token''"
   exit 1
 fi
 
