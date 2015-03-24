@@ -1,14 +1,13 @@
 #!/bin/bash
 set -e
 
-REGION="nyc3"
-SIZE="512mb"
+REGION="sgp1"
+SIZE="1024mb"
 NUMBER="3"
 OUTPUT="digital_ocean"
 TOKEN=""
-IMAGE="coreos-stable"
-
-TEST='{"id": "not_found","message": "The resource you were accessing could not be found."}'
+#IMAGE="ubuntu-14-04-x64"
+IMAGE="coreos-stable" #CoreOS
 
 while getopts ":z:m:n:d:t:" opt; do
   case $opt in
@@ -70,17 +69,21 @@ ssh-keygen -t dsa -f digital_ocean/ssh-key -C "arangodb@arangodb.com" -N ""
 SSHPUB=`cat digital_ocean/ssh-key.pub`
 
 echo Deploying ssh keypair on digital ocean.
-curl -X POST -H 'Content-Type: application/json' \
-             -H "Authorization: Bearer $TOKEN" \
-             -d "{\"name\":\"arangodb\",\"public_key\":\"$SSHPUB\"}" "https://api.digitalocean.com/v2/account/keys"
+SSHID=`curl -X POST -H 'Content-Type: application/json' \
+     -H "Authorization: Bearer $TOKEN" \
+     -d "{\"name\":\"arangodb\",\"public_key\":\"$SSHPUB\"}" "https://api.digitalocean.com/v2/account/keys" \
+     | python -mjson.tool | grep "\"id\"" | awk '{print $2}' | rev | cut -c 2- | rev`
 
 function createMachine () {
   echo "creating machine $PREFIX$1"
   touch $OUTPUT/hosts
-  curl -X POST "https://api.digitalocean.com/v2/droplets" \
-    -d "{\"name\":\"$PREFIX$1\",\"region\":\"$REGION\",\"size\":\"$SIZE\",\"image\":\"$IMAGE\"}" \
-    -H "Authorization: Bearer $TOKEN" \
-    -H "Content-Type: application/json" | python -mjson.tool | grep "\"id\"" | head -n 1 | awk '{print $2}' >> $OUTPUT/hosts
+
+  curl --request POST "https://api.digitalocean.com/v2/droplets" \
+       --header "Content-Type: application/json" \
+       --header "Authorization: Bearer $TOKEN" \
+       --data "{\"region\":\"nyc3\", \"image\":\"coreos-stable\", \"size\":\"512mb\", \"name\":\"core-1\", \"private_networking\":true,
+         \"ssh_keys\":[\"$SSHID\"], \"user_data\": \"\"}"
+
 }
 
 function getMachine () {
@@ -113,6 +116,11 @@ do
    RESULT2=`curl -X GET -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" \
                    "https://api.digitalocean.com/v2/droplets/$FIRST"`
    CHECK=`echo $RESULT2 | python -mjson.tool | grep "\"id\"" | head -n 1 | awk '{print $2}' | rev | cut -c 2- | rev`
+
+  echo 1: $FIRST
+  echo 2: $RESULT2
+  echo 3: $CHECK
+
    sleep 5
 
    if [ "$CHECK" != "not_found" ];
