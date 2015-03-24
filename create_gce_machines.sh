@@ -73,8 +73,8 @@ function createMachine () {
   a=`echo $INSTANCE | awk '{print $4}'`
   b=`echo $INSTANCE | awk '{print $5}'`
 
-  SERVERS_INTERNAL[$1]="$a"
-  SERVERS_EXTERNAL[$1]="$b"
+  SERVERS_INTERNAL[$1-1]="$a"
+  SERVERS_EXTERNAL[$1-1]="$b"
 }
 
 CURRENT_USER=`who|awk '{print $1}'`
