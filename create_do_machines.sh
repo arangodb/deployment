@@ -2,14 +2,14 @@
 set -e
 
 REGION="sgp1"
-SIZE="1024mb"
+SIZE="512mb"
 NUMBER="3"
 OUTPUT="digital_ocean"
 TOKEN=""
-#IMAGE="ubuntu-14-04-x64"
-IMAGE="coreos-stable" #CoreOS
+IMAGE="coreos-stable"
+SSHID=""
 
-while getopts ":z:m:n:d:t:" opt; do
+while getopts ":z:m:n:d:t:s:" opt; do
   case $opt in
     z)
       REGION="$OPTARG"
@@ -25,6 +25,9 @@ while getopts ":z:m:n:d:t:" opt; do
       ;;
     t)
       TOKEN="$OPTARG"
+      ;;
+    s)
+      SSHID="$OPTARG"
       ;;
     \?)
       echo "Invalid option: -$OPTARG" >&2
@@ -46,7 +49,6 @@ echo "REGION: $REGION"
 echo "SIZE: $SIZE"
 echo "NUMBER OF MACHINES: $NUMBER"
 echo "OUTPUT DIRECTORY: $OUTPUT"
-echo "PROJECT: $PROJECT"
 echo "MACHINE PREFIX: $PREFIX"
 
 if test -z "$TOKEN";  then
@@ -61,29 +63,35 @@ fi
 
 mkdir "$OUTPUT"
 
+if test -z "$SSHID";  then
+  echo "$0: no ssh key-pair id given. creating a new ssh key-pair."
+
+  #generate ssh key for later deploy
+  echo Generating local ssh keypair.
+  ssh-keygen -t dsa -f digital_ocean/ssh-key -C "arangodb@arangodb.com" -N ""
+  SSHPUB=`cat digital_ocean/ssh-key.pub`
+
+  echo Deploying ssh keypair on digital ocean.
+  SSHID=`curl -X POST -H 'Content-Type: application/json' \
+       -H "Authorization: Bearer $TOKEN" \
+       -d "{\"name\":\"arangodb\",\"public_key\":\"$SSHPUB\"}" "https://api.digitalocean.com/v2/account/keys" \
+       | python -mjson.tool | grep "\"id\"" | awk '{print $2}' | rev | cut -c 2- | rev`
+
+fi
+
 export CLOUDSDK_CONFIG="$OUTPUT/digital_ocean"
-
-#generate ssh key for later deploy
-echo Generating local ssh keypair.
-ssh-keygen -t dsa -f digital_ocean/ssh-key -C "arangodb@arangodb.com" -N ""
-SSHPUB=`cat digital_ocean/ssh-key.pub`
-
-echo Deploying ssh keypair on digital ocean.
-SSHID=`curl -X POST -H 'Content-Type: application/json' \
-     -H "Authorization: Bearer $TOKEN" \
-     -d "{\"name\":\"arangodb\",\"public_key\":\"$SSHPUB\"}" "https://api.digitalocean.com/v2/account/keys" \
-     | python -mjson.tool | grep "\"id\"" | awk '{print $2}' | rev | cut -c 2- | rev`
+touch $OUTPUT/hosts
+touch $OUTPUT/curl.log
 
 function createMachine () {
   echo "creating machine $PREFIX$1"
-  touch $OUTPUT/hosts
 
   curl --request POST "https://api.digitalocean.com/v2/droplets" \
        --header "Content-Type: application/json" \
        --header "Authorization: Bearer $TOKEN" \
-       --data "{\"region\":\"nyc3\", \"image\":\"coreos-stable\", \"size\":\"512mb\", \"name\":\"core-1\", \"private_networking\":true,
-         \"ssh_keys\":[\"$SSHID\"], \"user_data\": \"\"}"
-
+       --data "{\"region\":\"$REGION\", \"image\":\"$IMAGE\", \"size\":\"$SIZE\", \"name\":\"$PREFIX$1\",
+         \"ssh_keys\":[\"$SSHID\"], \"user_data\": \"\"}" \
+       -s > $OUTPUT/curl.log
 }
 
 function getMachine () {
