@@ -36,8 +36,6 @@ while getopts ":z:m:n:d:p:" opt; do
 done
 
 PREFIX="arangodb-test-$$-"
-declare -a SERVERS_EXTERNAL
-declare -a SERVERS_INTERNAL
 
 echo "ZONE: $ZONE"
 echo "MACHINE_TYPE: $MACHINE_TYPE"
@@ -77,7 +75,14 @@ function createMachine () {
   SERVERS_EXTERNAL[$1-1]="$b"
 }
 
-CURRENT_USER=`who|awk '{print $1}'`
+#CURRENT_USER=`who|awk '{print $1}'`
+#CoreOS PARAMS
+declare -a SERVERS_EXTERNAL
+declare -a SERVERS_INTERNAL
+SSH_USER="arangodb"
+SSH_CMD="gcloud compute ssh"
+SSH_PARAM="/bin/true"
+SSH_SUFFIX="--ssh-key-file gce/ssh-key --project "$PROJECT" --zone "$ZONE" --command "$SSH_PARAM" "arangodb@${PREFIX}1""
 
 #function createUser () {
   #gcloud compute ssh --ssh-key-file gce/ssh-key --zone "$ZONE" --command "sudo useradd -u 1337 -U -m -G adm,sudo,dip,video,plugdev arangodb" "$PREFIX$1"
