@@ -1,5 +1,16 @@
 #!/bin/bash
-set -e
+
+# This starts multiple coreos instances using google compute engine
+#
+# Prerequisites:
+# The following environment variables are used:
+#   PROJECT : project id of your designated project (e.g. -p "project_id");
+#
+# Optional prerequisites:
+#   ZONE  : size of the server (e.g. -z europe-west1-b)
+#   SIZE    : size/machine-type of the instance (e.g. -m n1-standard-2)
+#   NUMBER  : count of machines to create (e.g. -n 3)
+#   OUTPUT  : local output log folder (e.g. -d my-directory)
 
 ZONE="europe-west1-b"
 MACHINE_TYPE="f1-micro"
