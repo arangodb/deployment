@@ -12,6 +12,8 @@
 #                      this must be the corresponding network interfaces 
 #                      that are reachable from the outside, can be the same
 #   SSH_CMD          : command to use for ssh connection [default "ssh"]
+#   SSH_ARGS         : arguments to SSH_CMD, will be expanded in
+#                      quotes [default: "-oStrictHostKeyChecking no"]
 #   SSH_USER         : user name on remote machine [default "core"]
 #   SSH_SUFFIX       : suffix for ssh command [default ""].
 #   NRDBSERVERS      : is always set to the length of SERVERS_EXTERNAL
@@ -30,7 +32,7 @@
 
 # All servers must be accessible without typing passwords (tell your agent!)
 # via ssh using the following command for server number i:
-#   ${SSH_CMD} ${SSH_USER}@${SERVERS_EXTERNAL[i]} ${SSH_SUFFIX} docker run ...
+#   ${SSH_CMD} "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL[i]} ${SSH_SUFFIX} docker run ...
 
 # Two docker images are needed: 
 #  microbox/etcd for the agency and
@@ -54,16 +56,15 @@ fi
 declare -a SERVERS_EXTERNAL=($SERVERS_EXTERNAL)
 
 if [ -z "$SERVERS_INTERNAL" ] ; then
-  declare -a SERVERS_INTERNAL=(${SERVERS_EXTERNAL[*]})
+  declare -a SERVERS_INTERNAL=(${SERVERS_INTERNAL[*]})
 else
-  declare -a SERVERS_INTERNAL=($SERVERS_INTENRAL)
+  declare -a SERVERS_INTERNAL=($SERVERS_INTERNAL)
 fi
 
 NRDBSERVERS=${#SERVERS_EXTERNAL[*]}
 LASTDBSERVER=`expr $NRDBSERVERS - 1`
 
 echo Number of DBServers: $NRDBSERVERS
-NRCOORDINATORS=$2
 if [ -z "$NRCOORDINATORS" ] ; then
     NRCOORDINATORS=$NRDBSERVERS
 fi
@@ -74,6 +75,11 @@ if [ -z "$SSH_CMD" ] ; then
   SSH_CMD=ssh
 fi
 echo SSH_CMD=$SSH_CMD
+
+if [ -z "$SSH_ARGS" ] ; then
+  SSH_ARGS="-oStrictHostKeyChecking no"
+fi
+echo SSH_ARGS=$SSH_ARGS
 
 if [ -z "$SSH_USER" ] ; then
   SSH_USER=core
@@ -116,30 +122,30 @@ fi
 echo COORDINATOR_LOGS=$COORDINATOR_LOGS
 
 echo Creating directories on servers
-$SSH_CMD ${SSH_USER}@${SERVERS_EXTERNAL[0]} $SSH_SUFFIX mkdir $AGENCY_DIR >/dev/null 2>&1 &
+$SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL[0]} $SSH_SUFFIX mkdir $AGENCY_DIR >/dev/null 2>&1 &
 for i in `seq 0 $LASTDBSERVER` ; do
-  $SSH_CMD ${SSH_USER}@${SERVERS_EXTERNAL[$i]} $SSH_SUFFIX mkdir $DBSERVER_DATA $DBSERVER_LOGS >/dev/null 2>&1 &
+  $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL[$i]} $SSH_SUFFIX mkdir $DBSERVER_DATA $DBSERVER_LOGS >/dev/null 2>&1 &
 done
 for i in `seq 0 $LASTCOORDINATOR` ; do
-  $SSH_CMD ${SSH_USER}@${SERVERS_EXTERNAL[$i]} $SSH_SUFFIX mkdir $COORDINATOR_DATA $COORDINATOR_LOGS >/dev/null 2>&1 &
+  $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL[$i]} $SSH_SUFFIX mkdir $COORDINATOR_DATA $COORDINATOR_LOGS >/dev/null 2>&1 &
 done
 
 wait
 
 echo Starting agency...
-$SSH_CMD ${SSH_USER}@${SERVERS_EXTERNAL[0]} $SSH_SUFFIX "docker run --detach=true -p 4001:4001 --name=agency -v $AGENCY_DIR:/data microbox/etcd:latest etcd -name agency >/home/$SSH_USER/agency.log"
+$SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL[0]} $SSH_SUFFIX "docker run --detach=true -p 4001:4001 --name=agency -v $AGENCY_DIR:/data microbox/etcd:latest etcd -name agency >/home/$SSH_USER/agency.log"
 
 sleep 1
 echo Initializing agency...
-$SSH_CMD ${SSH_USER}@${SERVERS_EXTERNAL[0]} $SSH_SUFFIX "docker run --link=agency:agency --rm neunhoef/arangodb_cluster arangosh --javascript.execute /scripts/init_agency.js > /home/$SSH_USER/init_agency.log"
+$SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL[0]} $SSH_SUFFIX "docker run --link=agency:agency --rm neunhoef/arangodb_cluster arangosh --javascript.execute /scripts/init_agency.js > /home/$SSH_USER/init_agency.log"
 echo Starting discovery...
-$SSH_CMD ${SSH_USER}@${SERVERS_EXTERNAL[0]} $SSH_SUFFIX "docker run --detach=true --link=agency:agency --name discovery neunhoef/arangodb_cluster arangosh --javascript.execute scripts/discover.js > /home/$SSH_USER/discovery.log"
+$SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL[0]} $SSH_SUFFIX "docker run --detach=true --link=agency:agency --name discovery neunhoef/arangodb_cluster arangosh --javascript.execute scripts/discover.js > /home/$SSH_USER/discovery.log"
 
 start_dbserver () {
     i=$1
     echo Starting DBserver on ${SERVERS_EXTERNAL[$i]}:$PORT_DBSERVER
 
-    $SSH_CMD ${SSH_USER}@${SERVERS_EXTERNAL[$i]} $SSH_SUFFIX \
+    $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL[$i]} $SSH_SUFFIX \
     docker run --detach=true -v $DBSERVER_DATA:/data \
      -v $DBSERVER_LOGS:/logs --net=host \
      --name=dbserver$PORT_DBSERVER neunhoef/arangodb_cluster \
@@ -155,7 +161,7 @@ start_coordinator () {
     i=$1
     echo Starting Coordinator on ${SERVERS_EXTERNAL[$i]}:$PORT_COORDINATOR
 
-    $SSH_CMD ${SSH_USER}@${SERVERS_EXTERNAL[$i]} $SSH_SUFFIX \
+    $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL[$i]} $SSH_SUFFIX \
      docker run --detach=true -v $COORDINATOR_DATA:/data \
         -v $COORDINATOR_LOGS:/logs --net=host \
         --name=coordinator$PORT_COORDINATOR \
