@@ -14,5 +14,6 @@ For deployment at digital ocean you need a basic version of python installed:
 
 Create a three-instance cluster:
 ```sh
-$ ./create_do_machines.sh -t $TOKEN -n 3
+$ export TOKEN="your_token"
+$ ./create_do_machines.sh -n 3
 ```
