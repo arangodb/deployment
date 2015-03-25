@@ -17,6 +17,7 @@
 #   PREFIX : prefix for your machine names (e.g. "export PREFIX="arangodb-test-$$-")
 
 #set -e
+set -u
 
 REGION="sgp1"
 SIZE="512mb"
@@ -142,8 +143,9 @@ wait
 #Wait until machines are ready.
 while :
 do
+   firstid=`cat $OUTPUT/temp/INSTANCEID$i`
    RESULT=`curl -X GET -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" \
-                   "https://api.digitalocean.com/v2/droplets/$TMP_MACH_ID"`
+                   "https://api.digitalocean.com/v2/droplets/$firstid"`
    CHECK=`echo $RESULT | python -mjson.tool | grep "\"id\"" | head -n 1 | awk '{print $2}' | rev | cut -c 2- | rev`
 
    if [ "$CHECK" != "not_found" ];
