@@ -73,9 +73,9 @@ function createMachine () {
 
   SERVERS_INTERNAL[$1-1]="$a"
   SERVERS_EXTERNAL[$1-1]="$b"
+
 }
 
-#CURRENT_USER=`who|awk '{print $1}'`
 #CoreOS PARAMS
 declare -a SERVERS_EXTERNAL
 declare -a SERVERS_INTERNAL
