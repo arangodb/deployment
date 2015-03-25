@@ -3,14 +3,20 @@
 # This starts multiple coreos instances using digital ocean cloud platform
 #
 # Prerequisites:
-#   TOKEN : digital ocean api-token (as environment variable)
+# The following environment variables are used:
+#   TOKEN  : digital ocean api-token (as environment variable)
 #
 # Optional prerequisites:
-#   TOKEN : bash array with a list of IP addresses or hostnames
-#                      this must be the network interfaces that are reachable
-#
+#   REGION : size of the server (e.g. -z nyc3)
+#   SIZE   : size/machine-type of the instance (e.g. -m 512mb)
+#   NUMBER : count of machines to create (e.g. -n 3)
+#   OUTPUT : local output log folder (e.g. -d my-directory)
+#   SSHID  : id of your existing ssh keypair. if no id is set, a new
+#            keypair will be generated and transfered to your created
+#            instance (e.g. -s 123456)
+#   PREFIX : prefix for your machine names (e.g. "export PREFIX="arangodb-test-$$-")
 
-set -e
+#set -e
 
 REGION="sgp1"
 SIZE="512mb"
@@ -18,6 +24,13 @@ NUMBER="3"
 OUTPUT="digital_ocean"
 IMAGE="coreos-stable"
 SSHID=""
+
+#COREOS PARAMS
+declare -a SERVERS_EXTERNAL
+declare -a SERVERS_INTERNAL
+SSH_USER="arangodb"
+SSH_CMD="ssh"
+SSH_SUFFIX="--ssh-key-file $OUTPUT/ssh-key -l $SSH_USER"
 
 while getopts ":z:m:n:d:s:" opt; do
   case $opt in
@@ -46,9 +59,6 @@ while getopts ":z:m:n:d:s:" opt; do
       ;;
   esac
 done
-
-#GET DROPLET
-#curl -X GET -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" "https://api.digitalocean.com/v2/droplets/4566462"
 
 PREFIX="arangodb-test-$$-"
 
@@ -89,34 +99,39 @@ fi
 export CLOUDSDK_CONFIG="$OUTPUT/digital_ocean"
 touch $OUTPUT/hosts
 touch $OUTPUT/curl.log
+CURL=""
 
 function createMachine () {
   echo "creating machine $PREFIX$1"
 
-  curl --request POST "https://api.digitalocean.com/v2/droplets" \
+  CURL=`curl --request POST "https://api.digitalocean.com/v2/droplets" \
        --header "Content-Type: application/json" \
        --header "Authorization: Bearer $TOKEN" \
        --data "{\"region\":\"$REGION\", \"image\":\"$IMAGE\", \"size\":\"$SIZE\", \"name\":\"$PREFIX$1\",
-         \"ssh_keys\":[\"$SSHID\"], \"user_data\": \"\"}" \
-       -s > $OUTPUT/curl.log
+         \"ssh_keys\":[\"$SSHID\"], \"private_networking\":\"true\" ,\"user_data\": \"\"}"`
+
+  #save all IDs for fetching their detailed information
+
+
+  to_file=`echo $CURL | python -mjson.tool | grep "\"id\"" | head -n 1 | awk '{print $2}' | rev | cut -c 2- | rev`
+  echo $to_file > "$OUTPUT/temp/INSTANCEID$1"
 }
 
 function getMachine () {
+  id=`cat $OUTPUT/temp/INSTANCEID$i`
 
-  touch $OUTPUT/ips
+  echo "fetching machine information from $PREFIX$1"
+  RESULT2=`curl -X GET -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" \
+                          "https://api.digitalocean.com/v2/droplets/$id"`
 
-  while read line
-  do
+  a=`echo $RESULT2 | python -mjson.tool | grep "\"ip_address\"" | head -n 1 | awk '{print $2}' | cut -c 2- | rev | cut -c 3- | rev`
+  b=`echo $RESULT2 | python -mjson.tool | grep "\"ip_address\"" | head -n 2 | tail -1 |awk '{print $2}' | cut -c 2- | rev | cut -c 3- | rev`
 
-    name=$line
-    ID=`echo "$name" | rev | cut -c 2- | rev`
-    RESULT=`curl -X GET -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" \
-                   "https://api.digitalocean.com/v2/droplets/$ID"`
-    echo $RESULT | python -mjson.tool | grep "\"ip_address\"" | awk '{print $2}' | rev | cut -c 2- | rev >> $OUTPUT/ips
-echo $RESULT
-echo $ID
-  done < $OUTPUT/hosts
+  echo $a > "$OUTPUT/temp/INTERNAL$1"
+  echo $b > "$OUTPUT/temp/EXTERNAL$1"
 }
+
+mkdir "$OUTPUT/temp"
 
 for i in `seq $NUMBER`; do
   createMachine $i &
@@ -127,16 +142,9 @@ wait
 #Wait until machines are ready.
 while :
 do
-   FIRST=`cat $OUTPUT/hosts | head -n1 | rev | cut -c 2- | rev`
-   RESULT2=`curl -X GET -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" \
-                   "https://api.digitalocean.com/v2/droplets/$FIRST"`
-   CHECK=`echo $RESULT2 | python -mjson.tool | grep "\"id\"" | head -n 1 | awk '{print $2}' | rev | cut -c 2- | rev`
-
-  echo 1: $FIRST
-  echo 2: $RESULT2
-  echo 3: $CHECK
-
-   sleep 5
+   RESULT=`curl -X GET -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" \
+                   "https://api.digitalocean.com/v2/droplets/$TMP_MACH_ID"`
+   CHECK=`echo $RESULT | python -mjson.tool | grep "\"id\"" | head -n 1 | awk '{print $2}' | rev | cut -c 2- | rev`
 
    if [ "$CHECK" != "not_found" ];
    then
@@ -148,8 +156,27 @@ do
 
 done
 
-getMachine $i &
+wait
+
+sleep 5
+
+for i in `seq $NUMBER`; do
+  getMachine $i &
+done
 
 wait
+
+for i in `seq $NUMBER`; do
+  a=`cat $OUTPUT/temp/INTERNAL$i`
+  b=`cat $OUTPUT/temp/EXTERNAL$i`
+  SERVERS_INTERNAL[`expr $i - 1`]="$a"
+  SERVERS_EXTERNAL[`expr $i - 1`]="$b"
+done
+
+rm -rf $OUTPUT/temp
+
+echo ======== Instances ========
+echo Internal IPs: ${SERVERS_INTERNAL[@]}
+echo External IPs: ${SERVERS_EXTERNAL[@]}
 
 # NOW START Ansible and wait for opened ssh service
