@@ -48,7 +48,7 @@
 # on all machines.
 
 if [ -z "$SERVERS_EXTERNAL" ] ; then
-  echo Need SERVERS_EXTERNAL environment vairable
+  echo Need SERVERS_EXTERNAL environment variable
   exit 1
 fi
 declare -a SERVERS_EXTERNAL=($SERVERS_EXTERNAL)
