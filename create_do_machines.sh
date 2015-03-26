@@ -81,6 +81,7 @@ if test -e "$OUTPUT";  then
 fi
 
 mkdir "$OUTPUT"
+mkdir "$OUTPUT/temp"
 
 if test -z "$SSHID";  then
 
@@ -101,10 +102,42 @@ if test -z "$SSHID";  then
          | python -mjson.tool | grep "\"id\"" | awk '{print $2}' | rev | cut -c 2- | rev`
 
   else
-    echo "ArangoDB SSH-Key found. Using $HOME/.ssh/arangodb_key.pub"
 
-    KEYS=`curl -X GET -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" "https://api.digitalocean.com/v2/account/keys"`
-    echo $KEYS
+  BOOL=0
+
+    echo "ArangoDB SSH-Key found. Using $HOME/.ssh/arangodb_key.pub"
+    LOCAL_KEY=`cat $HOME/.ssh/arangodb_key.pub | awk '{print $2}'`
+    DOKEYS=`curl -X GET -H 'Content-Type: application/json' \
+           -H "Authorization: Bearer $TOKEN" "https://api.digitalocean.com/v2/account/keys"`
+
+    # TODO WRITE KEYS AND KEY IDS TO TEMP FILES
+    echo $(DOKEYS) | python -mjson.tool | grep "\"public_key\"" | awk '{print $3}' > "$OUTPUT/temp/do_keys"
+    #echo $DOKEYS | python -mjson.tool | grep "\"id\"" | awk '{print $2}' | rev | cut -c 2- | rev > $OUTPUT/temp/do_keys_ids
+
+    exit 1
+
+    while read line
+      do
+
+        if [ "$line" = "$LOCAL_KEY" ]
+          then
+              BOOL=1
+            break;
+        fi
+
+    if [ $BOOL -eq 1]
+
+      then
+      #TODO: LOOK FOR VALID ID AND STORE IT DO KEY ID VARIABLE
+        echo "Key is valid."
+
+      else
+        echo "Key is not deployed. Please remove $HOME/.ssh/arangodb_key.pub and re-run the script."
+        exit 1
+    fi
+
+    done < $OUTPUT/temp/do_keys
+
     exit 1
 
   fi
@@ -147,7 +180,6 @@ function getMachine () {
   echo $b > "$OUTPUT/temp/EXTERNAL$1"
 }
 
-mkdir "$OUTPUT/temp"
 
 for i in `seq $NUMBER`; do
   createMachine $i &
@@ -165,7 +197,7 @@ do
 
    if [ "$CHECK" != "not_found" ];
    then
-     echo ready: droplets now online. now installing arangodb.
+     echo ready: droplets now online.
      break;
    else
      echo waiting: droplets not ready yet...
