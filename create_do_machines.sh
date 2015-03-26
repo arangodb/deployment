@@ -195,8 +195,8 @@ rm -rf $OUTPUT/temp
 echo Internal IPs: ${SERVERS_INTERNAL_DO[@]}
 echo External IPs: ${SERVERS_EXTERNAL_DO[@]}
 
-SERVERS_INTERNAL=`echo ${SERVERS_INTERNAL_DO[@]}`
-SERVERS_EXTERNAL=`echo ${SERVERS_EXTERNAL_DO[@]}`
+SERVERS_INTERNAL="${SERVERS_INTERNAL_DO[@]}"
+SERVERS_EXTERNAL="${SERVERS_EXTERNAL_DO[@]}"
 
 # Export needed variables
 export SERVERS_INTERNAL
@@ -208,4 +208,4 @@ export SSH_SUFFIX="-i $HOME/.ssh/arangodb_key -l $SSH_USER"
 # Wait for do instances
 sleep 10
 
-. startDockerCluster.sh
+./startDockerCluster.sh

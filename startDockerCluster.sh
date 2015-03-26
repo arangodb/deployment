@@ -49,6 +49,8 @@
 #   - dbserver
 # on all machines.
 
+set +u
+
 if [ -z "$SERVERS_EXTERNAL" ] ; then
   echo Need SERVERS_EXTERNAL environment variable
   exit 1
