@@ -27,8 +27,8 @@ IMAGE="coreos-stable"
 SSHID=""
 
 #COREOS PARAMS
-declare -a SERVERS_EXTERNAL
-declare -a SERVERS_INTERNAL
+declare -a SERVERS_EXTERNAL_DO
+declare -a SERVERS_INTERNAL_DO
 SSH_USER="core"
 SSH_KEY="arangodb_key"
 SSH_CMD="ssh"
@@ -178,15 +178,17 @@ wait
 for i in `seq $NUMBER`; do
   a=`cat $OUTPUT/temp/INTERNAL$i`
   b=`cat $OUTPUT/temp/EXTERNAL$i`
-  SERVERS_INTERNAL[`expr $i - 1`]="$a"
-  SERVERS_EXTERNAL[`expr $i - 1`]="$b"
+  SERVERS_INTERNAL_DO[`expr $i - 1`]="$a"
+  SERVERS_EXTERNAL_DO[`expr $i - 1`]="$b"
 done
 
 rm -rf $OUTPUT/temp
 
-echo ======== Instances ========
-echo Internal IPs: ${SERVERS_INTERNAL[@]}
-echo External IPs: ${SERVERS_EXTERNAL[@]}
+echo Internal IPs: ${SERVERS_INTERNAL_DO[@]}
+echo External IPs: ${SERVERS_EXTERNAL_DO[@]}
+
+SERVERS_INTERNAL=`echo ${SERVERS_INTERNAL_DO[@]}`
+SERVERS_EXTERNAL=`echo ${SERVERS_EXTERNAL_DO[@]}`
 
 # Export needed variables
 export SERVERS_INTERNAL
