@@ -29,9 +29,10 @@ SSHID=""
 #COREOS PARAMS
 declare -a SERVERS_EXTERNAL
 declare -a SERVERS_INTERNAL
-SSH_USER="arangodb"
+SSH_USER="core"
+SSH_KEY="arangodb_key"
 SSH_CMD="ssh"
-SSH_SUFFIX="--ssh-key-file $OUTPUT/ssh-key -l $SSH_USER"
+SSH_SUFFIX="-i ~/.ssh/arangodb_key -l $SSH_USER"
 
 while getopts ":z:m:n:d:s:" opt; do
   case $opt in
@@ -86,8 +87,12 @@ if test -z "$SSHID";  then
 
   #generate ssh key for later deploy
   echo Generating local ssh keypair.
-  ssh-keygen -t dsa -f digital_ocean/ssh-key -C "arangodb@arangodb.com" -N ""
-  SSHPUB=`cat digital_ocean/ssh-key.pub`
+  #ssh-keygen -t dsa -f digital_ocean/ssh-key -C "arangodb@arangodb.com" -N ""
+  ssh-keygen -t dsa -f $OUTPUT/$SSH_KEY -C "arangodb@arangodb.com"
+
+  cp $OUTPUT/$SSH_KEY* ~/.ssh/
+
+  SSHPUB=`cat ~/.ssh/arangodb_key.pub`
 
   echo Deploying ssh keypair on digital ocean.
   SSHID=`curl -X POST -H 'Content-Type: application/json' \
@@ -96,6 +101,8 @@ if test -z "$SSHID";  then
        | python -mjson.tool | grep "\"id\"" | awk '{print $2}' | rev | cut -c 2- | rev`
 
 fi
+
+wait
 
 export CLOUDSDK_CONFIG="$OUTPUT/digital_ocean"
 touch $OUTPUT/hosts
@@ -181,4 +188,14 @@ echo ======== Instances ========
 echo Internal IPs: ${SERVERS_INTERNAL[@]}
 echo External IPs: ${SERVERS_EXTERNAL[@]}
 
-# NOW START Ansible and wait for opened ssh service
+# Export needed variables
+export SERVERS_INTERNAL
+export SERVERS_EXTERNAL
+export SSH_USER="core"
+export SSH_CMD="ssh"
+export SSH_SUFFIX="-i ~/.ssh/arangodb_key -l $SSH_USER"
+
+# Wait for do instances
+sleep 10
+
+. startDockerCluster.sh
