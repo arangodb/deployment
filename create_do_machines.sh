@@ -32,7 +32,7 @@ declare -a SERVERS_INTERNAL_DO
 SSH_USER="core"
 SSH_KEY="arangodb_key"
 SSH_CMD="ssh"
-SSH_SUFFIX="-i ~/.ssh/arangodb_key -l $SSH_USER"
+SSH_SUFFIX="-i $HOME/.ssh/arangodb_key -l $SSH_USER"
 
 while getopts ":z:m:n:d:s:" opt; do
   case $opt in
@@ -83,23 +83,31 @@ fi
 mkdir "$OUTPUT"
 
 if test -z "$SSHID";  then
-  echo "$0: no ssh key-pair id given. creating a new ssh key-pair."
 
-  #generate ssh key for later deploy
-  echo Generating local ssh keypair.
-  #ssh-keygen -t dsa -f digital_ocean/ssh-key -C "arangodb@arangodb.com" -N ""
-  ssh-keygen -t dsa -f $OUTPUT/$SSH_KEY -C "arangodb@arangodb.com"
+  if [ ! -f $HOME/.ssh/arangodb_key.pub ];
 
-  cp $OUTPUT/$SSH_KEY* ~/.ssh/
+  then
+    echo "No ArangoDB ssh key found. Generating a new one.!"
+    ssh-keygen -t dsa -f $OUTPUT/$SSH_KEY -C "arangodb@arangodb.com"
 
-  SSHPUB=`cat ~/.ssh/arangodb_key.pub`
+    cp $OUTPUT/$SSH_KEY* $HOME/.ssh/
 
-  echo Deploying ssh keypair on digital ocean.
-  SSHID=`curl -X POST -H 'Content-Type: application/json' \
-       -H "Authorization: Bearer $TOKEN" \
-       -d "{\"name\":\"arangodb\",\"public_key\":\"$SSHPUB\"}" "https://api.digitalocean.com/v2/account/keys" \
-       | python -mjson.tool | grep "\"id\"" | awk '{print $2}' | rev | cut -c 2- | rev`
+    SSHPUB=`cat $HOME/.ssh/arangodb_key.pub`
 
+    echo Deploying ssh keypair on digital ocean.
+    SSHID=`curl -X POST -H 'Content-Type: application/json' \
+         -H "Authorization: Bearer $TOKEN" \
+         -d "{\"name\":\"arangodb\",\"public_key\":\"$SSHPUB\"}" "https://api.digitalocean.com/v2/account/keys" \
+         | python -mjson.tool | grep "\"id\"" | awk '{print $2}' | rev | cut -c 2- | rev`
+
+  else
+    echo "ArangoDB SSH-Key found. Using $HOME/.ssh/arangodb_key.pub"
+
+    KEYS=`curl -X GET -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" "https://api.digitalocean.com/v2/account/keys"`
+    echo $KEYS
+    exit 1
+
+  fi
 fi
 
 wait
@@ -195,7 +203,7 @@ export SERVERS_INTERNAL
 export SERVERS_EXTERNAL
 export SSH_USER="core"
 export SSH_CMD="ssh"
-export SSH_SUFFIX="-i ~/.ssh/arangodb_key -l $SSH_USER"
+export SSH_SUFFIX="-i $HOME/.ssh/arangodb_key -l $SSH_USER"
 
 # Wait for do instances
 sleep 10
