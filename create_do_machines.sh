@@ -1,5 +1,4 @@
 #!/bin/bash
-
 # This starts multiple coreos instances using digital ocean cloud platform
 #
 # Prerequisites:
@@ -80,10 +79,12 @@ if test -e "$OUTPUT";  then
   exit 1
 fi
 
-mkdir "$OUTPUT"
-mkdir "$OUTPUT/temp"
+mkdir -p "$OUTPUT/temp"
 
 if test -z "$SSHID";  then
+
+  BOOL=0
+  COUNTER=0
 
   if [ ! -f $HOME/.ssh/arangodb_key.pub ];
 
@@ -103,44 +104,52 @@ if test -z "$SSHID";  then
 
   else
 
-  BOOL=0
-
     echo "ArangoDB SSH-Key found. Using $HOME/.ssh/arangodb_key.pub"
     LOCAL_KEY=`cat $HOME/.ssh/arangodb_key.pub | awk '{print $2}'`
     DOKEYS=`curl -X GET -H 'Content-Type: application/json' \
            -H "Authorization: Bearer $TOKEN" "https://api.digitalocean.com/v2/account/keys"`
 
-    # TODO WRITE KEYS AND KEY IDS TO TEMP FILES
-    echo $(DOKEYS) | python -mjson.tool | grep "\"public_key\"" | awk '{print $3}' > "$OUTPUT/temp/do_keys"
-    #echo $DOKEYS | python -mjson.tool | grep "\"id\"" | awk '{print $2}' | rev | cut -c 2- | rev > $OUTPUT/temp/do_keys_ids
-
-    exit 1
+    echo $DOKEYS | python -mjson.tool | grep "\"public_key\"" | awk '{print $3}' > "$OUTPUT/temp/do_keys"
+    echo $DOKEYS | python -mjson.tool | grep "\"id\"" | awk '{print $2}' | rev | cut -c 2- | rev > $OUTPUT/temp/do_keys_ids
 
     while read line
       do
+        COUNTER=$[COUNTER + 1]
 
         if [ "$line" = "$LOCAL_KEY" ]
           then
+              echo KEY FOUND
               BOOL=1
             break;
         fi
 
-    if [ $BOOL -eq 1]
-
-      then
-      #TODO: LOOK FOR VALID ID AND STORE IT DO KEY ID VARIABLE
-        echo "Key is valid."
-
-      else
-        echo "Key is not deployed. Please remove $HOME/.ssh/arangodb_key.pub and re-run the script."
-        exit 1
-    fi
-
-    done < $OUTPUT/temp/do_keys
-
-    exit 1
+    done < "$OUTPUT/temp/do_keys"
 
   fi
+
+  if [ "$BOOL" -eq 1 ];
+
+    then
+      echo "Found ssh key is valid."
+      SSHID=$(sed -n "${COUNTER}p" "$OUTPUT/temp/do_keys_ids")
+
+    else
+      read -p "Your stored SSH-Key is not deployed. Deploy $HOME/.ssh/arangodb_key.pub? y/n: "
+      if [[ $REPLY =~ ^[Yy]$ ]]
+        then
+          SSHPUB=`cat $HOME/.ssh/arangodb_key.pub`
+          echo Deploying ssh keypair on digital ocean.
+            SSHID=`curl -X POST -H 'Content-Type: application/json' \
+              -H "Authorization: Bearer $TOKEN" \
+              -d "{\"name\":\"arangodb\",\"public_key\":\"$SSHPUB\"}" "https://api.digitalocean.com/v2/account/keys" \
+              | python -mjson.tool | grep "\"id\"" | awk '{print $2}' | rev | cut -c 2- | rev`
+
+        else
+          echo "Please remove $HOME/.ssh/arangodb_key.pub and re-run the script."
+      fi
+
+  fi
+
 fi
 
 wait
