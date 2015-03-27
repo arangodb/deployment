@@ -145,6 +145,7 @@ if test -z "$SSHID";  then
 
         else
           echo "Please remove $HOME/.ssh/arangodb_key.pub and re-run the script."
+          exit 1
       fi
 
   fi
