@@ -101,7 +101,7 @@ if test -z "$SSHID";  then
     SSHID=`curl -X POST -H 'Content-Type: application/json' \
          -H "Authorization: Bearer $TOKEN" \
          -d "{\"name\":\"arangodb\",\"public_key\":\"$SSHPUB\"}" "https://api.digitalocean.com/v2/account/keys" \
-         | python -mjson.tool | grep "\"id\"" | awk '{print $2}' | rev | cut -c 2- | rev`
+         2>/dev/null | python -mjson.tool | grep "\"id\"" | awk '{print $2}' | rev | cut -c 2- | rev`
 
   else
 
@@ -110,10 +110,10 @@ if test -z "$SSHID";  then
     echo "ArangoDB SSH-Key found. Using $HOME/.ssh/arangodb_key.pub"
     LOCAL_KEY=`cat $HOME/.ssh/arangodb_key.pub | awk '{print $2}'`
     DOKEYS=`curl -X GET -H 'Content-Type: application/json' \
-           -H "Authorization: Bearer $TOKEN" "https://api.digitalocean.com/v2/account/keys"`
+           -H "Authorization: Bearer $TOKEN" "https://api.digitalocean.com/v2/account/keys" 2>/dev/null`
 
     # TODO WRITE KEYS AND KEY IDS TO TEMP FILES
-    echo $(DOKEYS) | python -mjson.tool | grep "\"public_key\"" | awk '{print $3}' > "$OUTPUT/temp/do_keys"
+    echo ${DOKEYS} | python -mjson.tool | grep "\"public_key\"" | awk '{print $3}' > "$OUTPUT/temp/do_keys"
     #echo $DOKEYS | python -mjson.tool | grep "\"id\"" | awk '{print $2}' | rev | cut -c 2- | rev > $OUTPUT/temp/do_keys_ids
 
     exit 1
@@ -158,8 +158,7 @@ function createMachine () {
   CURL=`curl --request POST "https://api.digitalocean.com/v2/droplets" \
        --header "Content-Type: application/json" \
        --header "Authorization: Bearer $TOKEN" \
-       --data "{\"region\":\"$REGION\", \"image\":\"$IMAGE\", \"size\":\"$SIZE\", \"name\":\"$PREFIX$1\",
-         \"ssh_keys\":[\"$SSHID\"], \"private_networking\":\"true\" ,\"user_data\": \"\"}"`
+       --data "{\"region\":\"$REGION\", \"image\":\"$IMAGE\", \"size\":\"$SIZE\", \"name\":\"$PREFIX$1\", \"ssh_keys\":[\"$SSHID\"], \"private_networking\":\"true\" }" 2>/dev/null`
 
   #save all IDs for fetching their detailed information
 
@@ -172,8 +171,7 @@ function getMachine () {
   id=`cat $OUTPUT/temp/INSTANCEID$i`
 
   echo "fetching machine information from $PREFIX$1"
-  RESULT2=`curl -X GET -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" \
-                          "https://api.digitalocean.com/v2/droplets/$id"`
+  RESULT2=`curl -X GET -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" "https://api.digitalocean.com/v2/droplets/$id" 2>/dev/null`
 
   a=`echo $RESULT2 | python -mjson.tool | grep "\"ip_address\"" | head -n 1 | awk '{print $2}' | cut -c 2- | rev | cut -c 3- | rev`
   b=`echo $RESULT2 | python -mjson.tool | grep "\"ip_address\"" | head -n 2 | tail -1 |awk '{print $2}' | cut -c 2- | rev | cut -c 3- | rev`
@@ -193,8 +191,7 @@ wait
 while :
 do
    firstid=`cat $OUTPUT/temp/INSTANCEID$i`
-   RESULT=`curl -X GET -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" \
-                   "https://api.digitalocean.com/v2/droplets/$firstid"`
+   RESULT=`curl -X GET -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" "https://api.digitalocean.com/v2/droplets/$firstid" 2>/dev/null`
    CHECK=`echo $RESULT | python -mjson.tool | grep "\"id\"" | head -n 1 | awk '{print $2}' | rev | cut -c 2- | rev`
 
    if [ "$CHECK" != "not_found" ];
