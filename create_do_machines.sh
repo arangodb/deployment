@@ -104,7 +104,7 @@ if test -z "$SSHID";  then
 
   else
 
-    echo "ArangoDB SSH-Key found. Using $HOME/.ssh/arangodb_key.pub"
+    echo "ArangoDB SSH-Key found. Try to use $HOME/.ssh/arangodb_key.pub"
     LOCAL_KEY=`cat $HOME/.ssh/arangodb_key.pub | awk '{print $2}'`
     DOKEYS=`curl -s -X GET -H 'Content-Type: application/json' \
            -H "Authorization: Bearer $TOKEN" "https://api.digitalocean.com/v2/account/keys"`
@@ -243,5 +243,7 @@ export SSH_CMD="ssh"
 export SSH_SUFFIX="-i $HOME/.ssh/arangodb_key -l $SSH_USER"
 
 # Wait for do instances
+
 sleep 10
+
 ./startDockerCluster.sh
