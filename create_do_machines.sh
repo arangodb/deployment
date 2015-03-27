@@ -138,7 +138,7 @@ if test -z "$SSHID";  then
         then
           SSHPUB=`cat $HOME/.ssh/arangodb_key.pub`
           echo Deploying ssh keypair on digital ocean.
-            SSHID=`curl -X POST -H 'Content-Type: application/json' \
+            SSHID=`curl -s -X POST -H 'Content-Type: application/json' \
               -H "Authorization: Bearer $TOKEN" \
               -d "{\"name\":\"arangodb\",\"public_key\":\"$SSHPUB\"}" "https://api.digitalocean.com/v2/account/keys" \
               | python -mjson.tool | grep "\"id\"" | awk '{print $2}' | rev | cut -c 2- | rev`
@@ -166,8 +166,6 @@ function createMachine () {
        --header "Authorization: Bearer $TOKEN" \
        --data "{\"region\":\"$REGION\", \"image\":\"$IMAGE\", \"size\":\"$SIZE\", \"name\":\"$PREFIX$1\",
          \"ssh_keys\":[\"$SSHID\"], \"private_networking\":\"true\" ,\"user_data\": \"\"}"`
-
-  #save all IDs for fetching their detailed information
 
   to_file=`echo $CURL | python -mjson.tool | grep "\"id\"" | head -n 1 | awk '{print $2}' | rev | cut -c 2- | rev`
   echo $to_file > "$OUTPUT/temp/INSTANCEID$1"
