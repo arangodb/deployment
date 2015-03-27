@@ -29,12 +29,10 @@ SSHID=""
 #COREOS PARAMS
 declare -a SERVERS_EXTERNAL_DO
 declare -a SERVERS_INTERNAL_DO
-declare -a SERVERS_IDS_DO
-
 SSH_USER="core"
 SSH_KEY="arangodb_key"
 SSH_CMD="ssh"
-SSH_SUFFIX=""
+SSH_SUFFIX="-i $HOME/.ssh/arangodb_key -l $SSH_USER"
 
 while getopts ":z:m:n:d:s:" opt; do
   case $opt in
@@ -83,37 +81,66 @@ if test -e "$OUTPUT";  then
 fi
 
 mkdir "$OUTPUT"
+mkdir "$OUTPUT/temp"
 
 if test -z "$SSHID";  then
-  if [ -e $HOME/.ssh/$SSH_KEY ] ; then
-    echo "$0: found ssh key-pair $SSH_KEY in ~/.ssh, good."
-    if ssh-add -l | grep arangodb_key >/dev/null ; then
-      echo Found arangodb_key in ssh-agent, good.
-    else
-      ssh-add $HOME/.ssh/$SSH_KEY
-    fi
-    SSHID=`cat $HOME/.ssh/$SSH_KEY.id`
 
-  else
-    echo "$0: no ssh key pair id given. creating a new ssh key-pair."
+  if [ ! -f $HOME/.ssh/arangodb_key.pub ];
 
-    #generate ssh key for later deploy
-    echo Generating ssh key pair.
-    #ssh-keygen -t dsa -f $HOME/.ssh/$SSH_KEY -C "arangodb@arangodb.com" -N ""
-    ssh-keygen -t dsa -f $HOME/.ssh/$SSH_KEY -C "arangodb@arangodb.com"
-    ssh-add $HOME/.ssh/$SSH_KEY
+  then
+    echo "No ArangoDB ssh key found. Generating a new one.!"
+    ssh-keygen -t dsa -f $OUTPUT/$SSH_KEY -C "arangodb@arangodb.com"
+
+    cp $OUTPUT/$SSH_KEY* $HOME/.ssh/
+
+    SSHPUB=`cat $HOME/.ssh/arangodb_key.pub`
 
     echo Deploying ssh keypair on digital ocean.
-    SSHPUB=`cat $HOME/.ssh/${SSH_KEY}.pub`
     SSHID=`curl -X POST -H 'Content-Type: application/json' \
          -H "Authorization: Bearer $TOKEN" \
          -d "{\"name\":\"arangodb\",\"public_key\":\"$SSHPUB\"}" "https://api.digitalocean.com/v2/account/keys" \
-         2>/dev/null | python -mjson.tool | grep "\"id\"" | awk '{print $2}' | rev | cut -c 2- | rev`
+         | python -mjson.tool | grep "\"id\"" | awk '{print $2}' | rev | cut -c 2- | rev`
 
-    echo $SSHID > $HOME/.ssh/$SSH_KEY.id
+  else
+
+  BOOL=0
+
+    echo "ArangoDB SSH-Key found. Using $HOME/.ssh/arangodb_key.pub"
+    LOCAL_KEY=`cat $HOME/.ssh/arangodb_key.pub | awk '{print $2}'`
+    DOKEYS=`curl -X GET -H 'Content-Type: application/json' \
+           -H "Authorization: Bearer $TOKEN" "https://api.digitalocean.com/v2/account/keys"`
+
+    # TODO WRITE KEYS AND KEY IDS TO TEMP FILES
+    echo $(DOKEYS) | python -mjson.tool | grep "\"public_key\"" | awk '{print $3}' > "$OUTPUT/temp/do_keys"
+    #echo $DOKEYS | python -mjson.tool | grep "\"id\"" | awk '{print $2}' | rev | cut -c 2- | rev > $OUTPUT/temp/do_keys_ids
+
+    exit 1
+
+    while read line
+      do
+
+        if [ "$line" = "$LOCAL_KEY" ]
+          then
+              BOOL=1
+            break;
+        fi
+
+    if [ $BOOL -eq 1]
+
+      then
+      #TODO: LOOK FOR VALID ID AND STORE IT DO KEY ID VARIABLE
+        echo "Key is valid."
+
+      else
+        echo "Key is not deployed. Please remove $HOME/.ssh/arangodb_key.pub and re-run the script."
+        exit 1
+    fi
+
+    done < $OUTPUT/temp/do_keys
+
+    exit 1
 
   fi
-
 fi
 
 wait
@@ -129,7 +156,8 @@ function createMachine () {
   CURL=`curl --request POST "https://api.digitalocean.com/v2/droplets" \
        --header "Content-Type: application/json" \
        --header "Authorization: Bearer $TOKEN" \
-       --data "{\"region\":\"$REGION\", \"image\":\"$IMAGE\", \"size\":\"$SIZE\", \"name\":\"$PREFIX$1\", \"ssh_keys\":[\"$SSHID\"], \"private_networking\":\"true\" }" 2>/dev/null`
+       --data "{\"region\":\"$REGION\", \"image\":\"$IMAGE\", \"size\":\"$SIZE\", \"name\":\"$PREFIX$1\",
+         \"ssh_keys\":[\"$SSHID\"], \"private_networking\":\"true\" ,\"user_data\": \"\"}"`
 
   #save all IDs for fetching their detailed information
 
@@ -142,7 +170,8 @@ function getMachine () {
   id=`cat $OUTPUT/temp/INSTANCEID$i`
 
   echo "fetching machine information from $PREFIX$1"
-  RESULT2=`curl -X GET -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" "https://api.digitalocean.com/v2/droplets/$id" 2>/dev/null`
+  RESULT2=`curl -X GET -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" \
+                          "https://api.digitalocean.com/v2/droplets/$id"`
 
   a=`echo $RESULT2 | python -mjson.tool | grep "\"ip_address\"" | head -n 1 | awk '{print $2}' | cut -c 2- | rev | cut -c 3- | rev`
   b=`echo $RESULT2 | python -mjson.tool | grep "\"ip_address\"" | head -n 2 | tail -1 |awk '{print $2}' | cut -c 2- | rev | cut -c 3- | rev`
@@ -151,7 +180,6 @@ function getMachine () {
   echo $b > "$OUTPUT/temp/EXTERNAL$1"
 }
 
-mkdir "$OUTPUT/temp"
 
 for i in `seq $NUMBER`; do
   createMachine $i &
@@ -163,12 +191,13 @@ wait
 while :
 do
    firstid=`cat $OUTPUT/temp/INSTANCEID$i`
-   RESULT=`curl -X GET -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" "https://api.digitalocean.com/v2/droplets/$firstid" 2>/dev/null`
+   RESULT=`curl -X GET -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" \
+                   "https://api.digitalocean.com/v2/droplets/$firstid"`
    CHECK=`echo $RESULT | python -mjson.tool | grep "\"id\"" | head -n 1 | awk '{print $2}' | rev | cut -c 2- | rev`
 
    if [ "$CHECK" != "not_found" ];
    then
-     echo ready: droplets now online. now installing arangodb.
+     echo ready: droplets now online.
      break;
    else
      echo waiting: droplets not ready yet...
@@ -189,42 +218,26 @@ wait
 for i in `seq $NUMBER`; do
   a=`cat $OUTPUT/temp/INTERNAL$i`
   b=`cat $OUTPUT/temp/EXTERNAL$i`
-  id=`cat $OUTPUT/temp/INSTANCEID$i`
   SERVERS_INTERNAL_DO[`expr $i - 1`]="$a"
   SERVERS_EXTERNAL_DO[`expr $i - 1`]="$b"
-  SERVERS_IDS_DO[`expr $i - 1`]="$id"
-
 done
 
 rm -rf $OUTPUT/temp
 
 echo Internal IPs: ${SERVERS_INTERNAL_DO[@]}
 echo External IPs: ${SERVERS_EXTERNAL_DO[@]}
-echo IDs         : ${SERVERS_IDS_DO[@]}
 
 SERVERS_INTERNAL="${SERVERS_INTERNAL_DO[@]}"
 SERVERS_EXTERNAL="${SERVERS_EXTERNAL_DO[@]}"
-SERVERS_IDS="${SERVERS_IDS_DO[@]}"
-
-# Write data to file:
-echo > $OUTPUT/clusterinfo.sh "SERVERS_INTERNAL=\"$SERVERS_INTERNAL\""
-echo >>$OUTPUT/clusterinfo.sh "SERVERS_EXTERNAL=\"$SERVERS_EXTERNAL\""
-echo >>$OUTPUT/clusterinfo.sh "SERVERS_IDS=\"$SERVERS_IDS\""
-echo >>$OUTPUT/clusterinfo.sh "SSH_USER=\"$SSH_USER\""
-echo >>$OUTPUT/clusterinfo.sh "SSH_CMD=\"$SSH_CMD\""
-echo >>$OUTPUT/clusterinfo.sh "SSH_SUFFIX=\"$SSH_SUFFIX\""
-echo >>$OUTPUT/clusterinfo.sh "PREFIX=\"$PREFIX\""
 
 # Export needed variables
 export SERVERS_INTERNAL
 export SERVERS_EXTERNAL
-export SERVERS_IDS
 export SSH_USER="core"
 export SSH_CMD="ssh"
-export SSH_SUFFIX=""
+export SSH_SUFFIX="-i $HOME/.ssh/arangodb_key -l $SSH_USER"
 
-# Wait for DO instances
+# Wait for do instances
 sleep 10
 
 ./startDockerCluster.sh
-
