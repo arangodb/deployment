@@ -29,6 +29,8 @@ SSHID=""
 #COREOS PARAMS
 declare -a SERVERS_EXTERNAL_DO
 declare -a SERVERS_INTERNAL_DO
+declare -a SERVERS_IDS_DO
+
 SSH_USER="core"
 SSH_KEY="arangodb_key"
 SSH_CMD="ssh"
@@ -218,26 +220,42 @@ wait
 for i in `seq $NUMBER`; do
   a=`cat $OUTPUT/temp/INTERNAL$i`
   b=`cat $OUTPUT/temp/EXTERNAL$i`
+  id=`cat $OUTPUT/temp/INSTANCEID$i`
   SERVERS_INTERNAL_DO[`expr $i - 1`]="$a"
   SERVERS_EXTERNAL_DO[`expr $i - 1`]="$b"
+  SERVERS_IDS_DO[`expr $i - 1`]="$id"
+
 done
 
 rm -rf $OUTPUT/temp
 
 echo Internal IPs: ${SERVERS_INTERNAL_DO[@]}
 echo External IPs: ${SERVERS_EXTERNAL_DO[@]}
+echo IDs         : ${SERVERS_IDS_DO[@]}
 
 SERVERS_INTERNAL="${SERVERS_INTERNAL_DO[@]}"
 SERVERS_EXTERNAL="${SERVERS_EXTERNAL_DO[@]}"
+SERVERS_IDS="${SERVERS_IDS_DO[@]}"
+
+# Write data to file:
+echo > $OUTPUT/clusterinfo.sh "SERVERS_INTERNAL=\"$SERVERS_INTERNAL\""
+echo >>$OUTPUT/clusterinfo.sh "SERVERS_EXTERNAL=\"$SERVERS_EXTERNAL\""
+echo >>$OUTPUT/clusterinfo.sh "SERVERS_IDS=\"$SERVERS_IDS\""
+echo >>$OUTPUT/clusterinfo.sh "SSH_USER=\"$SSH_USER\""
+echo >>$OUTPUT/clusterinfo.sh "SSH_CMD=\"$SSH_CMD\""
+echo >>$OUTPUT/clusterinfo.sh "SSH_SUFFIX=\"$SSH_SUFFIX\""
+echo >>$OUTPUT/clusterinfo.sh "PREFIX=\"$PREFIX\""
 
 # Export needed variables
 export SERVERS_INTERNAL
 export SERVERS_EXTERNAL
+export SERVERS_IDS
 export SSH_USER="core"
 export SSH_CMD="ssh"
 export SSH_SUFFIX="-i $HOME/.ssh/arangodb_key -l $SSH_USER"
 
-# Wait for do instances
+# Wait for DO instances
 sleep 10
 
 ./startDockerCluster.sh
+
