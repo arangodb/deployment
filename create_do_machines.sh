@@ -1,5 +1,4 @@
 #!/bin/bash
-
 # This starts multiple coreos instances using digital ocean cloud platform
 #
 # Prerequisites:
@@ -72,25 +71,24 @@ echo "NUMBER OF MACHINES: $NUMBER"
 echo "OUTPUT DIRECTORY: $OUTPUT"
 echo "MACHINE PREFIX: $PREFIX"
 
-if test -z "$TOKEN";  then
-  echo "$0: you must supply a token as environment variable with 'export TOKEN='your_token''"
-  exit 1
-fi
+: ${TOKEN?"You must supply a token as environment variable with 'export TOKEN='your_token'"}
 
 if test -e "$OUTPUT";  then
   echo "$0: refusing to use existing directory '$OUTPUT'"
   exit 1
 fi
 
-mkdir "$OUTPUT"
-mkdir "$OUTPUT/temp"
+mkdir -p "$OUTPUT/temp"
 
 if test -z "$SSHID";  then
+
+  BOOL=0
+  COUNTER=0
 
   if [ ! -f $HOME/.ssh/arangodb_key.pub ];
 
   then
-    echo "No ArangoDB ssh key found. Generating a new one.!"
+    echo "No ArangoDB SSH-Key found. Generating a new one.!"
     ssh-keygen -t dsa -f $OUTPUT/$SSH_KEY -C "arangodb@arangodb.com"
 
     cp $OUTPUT/$SSH_KEY* $HOME/.ssh/
@@ -98,28 +96,24 @@ if test -z "$SSHID";  then
     SSHPUB=`cat $HOME/.ssh/arangodb_key.pub`
 
     echo Deploying ssh keypair on digital ocean.
-    SSHID=`curl -X POST -H 'Content-Type: application/json' \
+    SSHID=`curl -s -X POST -H 'Content-Type: application/json' \
          -H "Authorization: Bearer $TOKEN" \
          -d "{\"name\":\"arangodb\",\"public_key\":\"$SSHPUB\"}" "https://api.digitalocean.com/v2/account/keys" \
          2>/dev/null | python -mjson.tool | grep "\"id\"" | awk '{print $2}' | rev | cut -c 2- | rev`
 
   else
 
-  BOOL=0
-
-    echo "ArangoDB SSH-Key found. Using $HOME/.ssh/arangodb_key.pub"
+    echo "ArangoDB SSH-Key found. Try to use $HOME/.ssh/arangodb_key.pub"
     LOCAL_KEY=`cat $HOME/.ssh/arangodb_key.pub | awk '{print $2}'`
-    DOKEYS=`curl -X GET -H 'Content-Type: application/json' \
-           -H "Authorization: Bearer $TOKEN" "https://api.digitalocean.com/v2/account/keys" 2>/dev/null`
+    DOKEYS=`curl -s -X GET -H 'Content-Type: application/json' \
+           -H "Authorization: Bearer $TOKEN" "https://api.digitalocean.com/v2/account/keys"`
 
-    # TODO WRITE KEYS AND KEY IDS TO TEMP FILES
-    echo ${DOKEYS} | python -mjson.tool | grep "\"public_key\"" | awk '{print $3}' > "$OUTPUT/temp/do_keys"
-    #echo $DOKEYS | python -mjson.tool | grep "\"id\"" | awk '{print $2}' | rev | cut -c 2- | rev > $OUTPUT/temp/do_keys_ids
-
-    exit 1
+    echo $DOKEYS | python -mjson.tool | grep "\"public_key\"" | awk '{print $3}' > "$OUTPUT/temp/do_keys"
+    echo $DOKEYS | python -mjson.tool | grep "\"id\"" | awk '{print $2}' | rev | cut -c 2- | rev > $OUTPUT/temp/do_keys_ids
 
     while read line
       do
+        COUNTER=$[COUNTER + 1]
 
         if [ "$line" = "$LOCAL_KEY" ]
           then
@@ -127,22 +121,34 @@ if test -z "$SSHID";  then
             break;
         fi
 
-    if [ $BOOL -eq 1]
-
-      then
-      #TODO: LOOK FOR VALID ID AND STORE IT DO KEY ID VARIABLE
-        echo "Key is valid."
-
-      else
-        echo "Key is not deployed. Please remove $HOME/.ssh/arangodb_key.pub and re-run the script."
-        exit 1
-    fi
-
-    done < $OUTPUT/temp/do_keys
-
-    exit 1
+    done < "$OUTPUT/temp/do_keys"
 
   fi
+
+  if [ "$BOOL" -eq 1 ];
+
+    then
+      echo "SSH-Key is valid."
+      SSHID=$(sed -n "${COUNTER}p" "$OUTPUT/temp/do_keys_ids")
+
+    else
+      read -p "Your stored SSH-Key is not deployed. Deploy $HOME/.ssh/arangodb_key.pub? y/n: "
+      if [[ $REPLY =~ ^[Yy]$ ]]
+        then
+          SSHPUB=`cat $HOME/.ssh/arangodb_key.pub`
+          echo Deploying ssh keypair on digital ocean.
+            SSHID=`curl -s -X POST -H 'Content-Type: application/json' \
+              -H "Authorization: Bearer $TOKEN" \
+              -d "{\"name\":\"arangodb\",\"public_key\":\"$SSHPUB\"}" "https://api.digitalocean.com/v2/account/keys" \
+              | python -mjson.tool | grep "\"id\"" | awk '{print $2}' | rev | cut -c 2- | rev`
+
+        else
+          echo "Please remove $HOME/.ssh/arangodb_key.pub and re-run the script."
+          exit 1
+      fi
+
+  fi
+
 fi
 
 wait
@@ -155,13 +161,10 @@ CURL=""
 function createMachine () {
   echo "creating machine $PREFIX$1"
 
-  CURL=`curl --request POST "https://api.digitalocean.com/v2/droplets" \
+  CURL=`curl -s --request POST "https://api.digitalocean.com/v2/droplets" \
        --header "Content-Type: application/json" \
        --header "Authorization: Bearer $TOKEN" \
        --data "{\"region\":\"$REGION\", \"image\":\"$IMAGE\", \"size\":\"$SIZE\", \"name\":\"$PREFIX$1\", \"ssh_keys\":[\"$SSHID\"], \"private_networking\":\"true\" }" 2>/dev/null`
-
-  #save all IDs for fetching their detailed information
-
 
   to_file=`echo $CURL | python -mjson.tool | grep "\"id\"" | head -n 1 | awk '{print $2}' | rev | cut -c 2- | rev`
   echo $to_file > "$OUTPUT/temp/INSTANCEID$1"
@@ -171,7 +174,8 @@ function getMachine () {
   id=`cat $OUTPUT/temp/INSTANCEID$i`
 
   echo "fetching machine information from $PREFIX$1"
-  RESULT2=`curl -X GET -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" "https://api.digitalocean.com/v2/droplets/$id" 2>/dev/null`
+  RESULT2=`curl -s -X GET -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" \
+                          "https://api.digitalocean.com/v2/droplets/$id" 2>/dev/null`
 
   a=`echo $RESULT2 | python -mjson.tool | grep "\"ip_address\"" | head -n 1 | awk '{print $2}' | cut -c 2- | rev | cut -c 3- | rev`
   b=`echo $RESULT2 | python -mjson.tool | grep "\"ip_address\"" | head -n 2 | tail -1 |awk '{print $2}' | cut -c 2- | rev | cut -c 3- | rev`
@@ -185,13 +189,16 @@ for i in `seq $NUMBER`; do
   createMachine $i &
 done
 
+sleep 5
+
 wait
 
 #Wait until machines are ready.
 while :
 do
    firstid=`cat $OUTPUT/temp/INSTANCEID$i`
-   RESULT=`curl -X GET -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" "https://api.digitalocean.com/v2/droplets/$firstid" 2>/dev/null`
+   RESULT=`curl -s -X GET -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" \
+                   "https://api.digitalocean.com/v2/droplets/$firstid" 2>/dev/null`
    CHECK=`echo $RESULT | python -mjson.tool | grep "\"id\"" | head -n 1 | awk '{print $2}' | rev | cut -c 2- | rev`
 
    if [ "$CHECK" != "not_found" ];
@@ -206,11 +213,13 @@ done
 
 wait
 
-sleep 5
+sleep 3
 
 for i in `seq $NUMBER`; do
   getMachine $i &
 done
+
+sleep 3
 
 wait
 
@@ -252,6 +261,7 @@ export SSH_CMD="ssh"
 export SSH_SUFFIX="-i $HOME/.ssh/arangodb_key -l $SSH_USER"
 
 # Wait for DO instances
+
 sleep 10
 
 ./startDockerCluster.sh
