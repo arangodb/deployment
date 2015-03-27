@@ -69,10 +69,7 @@ echo "NUMBER OF MACHINES: $NUMBER"
 echo "OUTPUT DIRECTORY: $OUTPUT"
 echo "MACHINE PREFIX: $PREFIX"
 
-if test -z "$TOKEN";  then
-  echo "$0: you must supply a token as environment variable with 'export TOKEN='your_token''"
-  exit 1
-fi
+: ${TOKEN?"You must supply a token as environment variable with 'export TOKEN='your_token'"}
 
 if test -e "$OUTPUT";  then
   echo "$0: refusing to use existing directory '$OUTPUT'"
