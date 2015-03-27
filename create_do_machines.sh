@@ -97,7 +97,7 @@ if test -z "$SSHID";  then
     SSHPUB=`cat $HOME/.ssh/arangodb_key.pub`
 
     echo Deploying ssh keypair on digital ocean.
-    SSHID=`curl -X POST -H 'Content-Type: application/json' \
+    SSHID=`curl -s -X POST -H 'Content-Type: application/json' \
          -H "Authorization: Bearer $TOKEN" \
          -d "{\"name\":\"arangodb\",\"public_key\":\"$SSHPUB\"}" "https://api.digitalocean.com/v2/account/keys" \
          | python -mjson.tool | grep "\"id\"" | awk '{print $2}' | rev | cut -c 2- | rev`
@@ -106,7 +106,7 @@ if test -z "$SSHID";  then
 
     echo "ArangoDB SSH-Key found. Using $HOME/.ssh/arangodb_key.pub"
     LOCAL_KEY=`cat $HOME/.ssh/arangodb_key.pub | awk '{print $2}'`
-    DOKEYS=`curl -X GET -H 'Content-Type: application/json' \
+    DOKEYS=`curl -s -X GET -H 'Content-Type: application/json' \
            -H "Authorization: Bearer $TOKEN" "https://api.digitalocean.com/v2/account/keys"`
 
     echo $DOKEYS | python -mjson.tool | grep "\"public_key\"" | awk '{print $3}' > "$OUTPUT/temp/do_keys"
@@ -118,7 +118,6 @@ if test -z "$SSHID";  then
 
         if [ "$line" = "$LOCAL_KEY" ]
           then
-              echo KEY FOUND
               BOOL=1
             break;
         fi
@@ -162,14 +161,13 @@ CURL=""
 function createMachine () {
   echo "creating machine $PREFIX$1"
 
-  CURL=`curl --request POST "https://api.digitalocean.com/v2/droplets" \
+  CURL=`curl -s --request POST "https://api.digitalocean.com/v2/droplets" \
        --header "Content-Type: application/json" \
        --header "Authorization: Bearer $TOKEN" \
        --data "{\"region\":\"$REGION\", \"image\":\"$IMAGE\", \"size\":\"$SIZE\", \"name\":\"$PREFIX$1\",
          \"ssh_keys\":[\"$SSHID\"], \"private_networking\":\"true\" ,\"user_data\": \"\"}"`
 
   #save all IDs for fetching their detailed information
-
 
   to_file=`echo $CURL | python -mjson.tool | grep "\"id\"" | head -n 1 | awk '{print $2}' | rev | cut -c 2- | rev`
   echo $to_file > "$OUTPUT/temp/INSTANCEID$1"
@@ -179,7 +177,7 @@ function getMachine () {
   id=`cat $OUTPUT/temp/INSTANCEID$i`
 
   echo "fetching machine information from $PREFIX$1"
-  RESULT2=`curl -X GET -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" \
+  RESULT2=`curl -s -X GET -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" \
                           "https://api.digitalocean.com/v2/droplets/$id"`
 
   a=`echo $RESULT2 | python -mjson.tool | grep "\"ip_address\"" | head -n 1 | awk '{print $2}' | cut -c 2- | rev | cut -c 3- | rev`
@@ -200,7 +198,7 @@ wait
 while :
 do
    firstid=`cat $OUTPUT/temp/INSTANCEID$i`
-   RESULT=`curl -X GET -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" \
+   RESULT=`curl -s -X GET -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" \
                    "https://api.digitalocean.com/v2/droplets/$firstid"`
    CHECK=`echo $RESULT | python -mjson.tool | grep "\"id\"" | head -n 1 | awk '{print $2}' | rev | cut -c 2- | rev`
 
@@ -248,5 +246,7 @@ export SSH_SUFFIX="-i $HOME/.ssh/arangodb_key -l $SSH_USER"
 
 # Wait for do instances
 sleep 10
+
+exit 1
 
 ./startDockerCluster.sh
