@@ -212,11 +212,13 @@ done
 
 wait
 
-sleep 5
+sleep 3
 
 for i in `seq $NUMBER`; do
   getMachine $i &
 done
+
+sleep 3
 
 wait
 
