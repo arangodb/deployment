@@ -247,6 +247,4 @@ export SSH_SUFFIX="-i $HOME/.ssh/arangodb_key -l $SSH_USER"
 # Wait for do instances
 sleep 10
 
-exit 1
-
 ./startDockerCluster.sh
