@@ -9,7 +9,7 @@
 #   REGION : size of the server (e.g. -z nyc3)
 #   SIZE   : size/machine-type of the instance (e.g. -m 512mb)
 #   NUMBER : count of machines to create (e.g. -n 3)
-#   OUTPUT : local output log folder (e.g. -d my-directory)
+#   OUTPUT : local output log folder (e.g. -d /my/directory)
 #   SSHID  : id of your existing ssh keypair. if no id is set, a new
 #            keypair will be generated and transfered to your created
 #            instance (e.g. -s 123456)
