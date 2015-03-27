@@ -190,6 +190,8 @@ for i in `seq $NUMBER`; do
   createMachine $i &
 done
 
+sleep 5
+
 wait
 
 #Wait until machines are ready.
