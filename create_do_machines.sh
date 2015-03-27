@@ -28,6 +28,8 @@ SSHID=""
 #COREOS PARAMS
 declare -a SERVERS_EXTERNAL_DO
 declare -a SERVERS_INTERNAL_DO
+declare -a SERVERS_IDS_DO
+
 SSH_USER="core"
 SSH_KEY="arangodb_key"
 SSH_CMD="ssh"
@@ -97,7 +99,7 @@ if test -z "$SSHID";  then
     SSHID=`curl -s -X POST -H 'Content-Type: application/json' \
          -H "Authorization: Bearer $TOKEN" \
          -d "{\"name\":\"arangodb\",\"public_key\":\"$SSHPUB\"}" "https://api.digitalocean.com/v2/account/keys" \
-         | python -mjson.tool | grep "\"id\"" | awk '{print $2}' | rev | cut -c 2- | rev`
+         2>/dev/null | python -mjson.tool | grep "\"id\"" | awk '{print $2}' | rev | cut -c 2- | rev`
 
   else
 
@@ -162,8 +164,7 @@ function createMachine () {
   CURL=`curl -s --request POST "https://api.digitalocean.com/v2/droplets" \
        --header "Content-Type: application/json" \
        --header "Authorization: Bearer $TOKEN" \
-       --data "{\"region\":\"$REGION\", \"image\":\"$IMAGE\", \"size\":\"$SIZE\", \"name\":\"$PREFIX$1\",
-         \"ssh_keys\":[\"$SSHID\"], \"private_networking\":\"true\" ,\"user_data\": \"\"}"`
+       --data "{\"region\":\"$REGION\", \"image\":\"$IMAGE\", \"size\":\"$SIZE\", \"name\":\"$PREFIX$1\", \"ssh_keys\":[\"$SSHID\"], \"private_networking\":\"true\" }" 2>/dev/null`
 
   to_file=`echo $CURL | python -mjson.tool | grep "\"id\"" | head -n 1 | awk '{print $2}' | rev | cut -c 2- | rev`
   echo $to_file > "$OUTPUT/temp/INSTANCEID$1"
@@ -174,7 +175,7 @@ function getMachine () {
 
   echo "fetching machine information from $PREFIX$1"
   RESULT2=`curl -s -X GET -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" \
-                          "https://api.digitalocean.com/v2/droplets/$id"`
+                          "https://api.digitalocean.com/v2/droplets/$id" 2>/dev/null`
 
   a=`echo $RESULT2 | python -mjson.tool | grep "\"ip_address\"" | head -n 1 | awk '{print $2}' | cut -c 2- | rev | cut -c 3- | rev`
   b=`echo $RESULT2 | python -mjson.tool | grep "\"ip_address\"" | head -n 2 | tail -1 |awk '{print $2}' | cut -c 2- | rev | cut -c 3- | rev`
@@ -197,7 +198,7 @@ while :
 do
    firstid=`cat $OUTPUT/temp/INSTANCEID$i`
    RESULT=`curl -s -X GET -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" \
-                   "https://api.digitalocean.com/v2/droplets/$firstid"`
+                   "https://api.digitalocean.com/v2/droplets/$firstid" 2>/dev/null`
    CHECK=`echo $RESULT | python -mjson.tool | grep "\"id\"" | head -n 1 | awk '{print $2}' | rev | cut -c 2- | rev`
 
    if [ "$CHECK" != "not_found" ];
@@ -225,27 +226,43 @@ wait
 for i in `seq $NUMBER`; do
   a=`cat $OUTPUT/temp/INTERNAL$i`
   b=`cat $OUTPUT/temp/EXTERNAL$i`
+  id=`cat $OUTPUT/temp/INSTANCEID$i`
   SERVERS_INTERNAL_DO[`expr $i - 1`]="$a"
   SERVERS_EXTERNAL_DO[`expr $i - 1`]="$b"
+  SERVERS_IDS_DO[`expr $i - 1`]="$id"
+
 done
 
 rm -rf $OUTPUT/temp
 
 echo Internal IPs: ${SERVERS_INTERNAL_DO[@]}
 echo External IPs: ${SERVERS_EXTERNAL_DO[@]}
+echo IDs         : ${SERVERS_IDS_DO[@]}
 
 SERVERS_INTERNAL="${SERVERS_INTERNAL_DO[@]}"
 SERVERS_EXTERNAL="${SERVERS_EXTERNAL_DO[@]}"
+SERVERS_IDS="${SERVERS_IDS_DO[@]}"
+
+# Write data to file:
+echo > $OUTPUT/clusterinfo.sh "SERVERS_INTERNAL=\"$SERVERS_INTERNAL\""
+echo >>$OUTPUT/clusterinfo.sh "SERVERS_EXTERNAL=\"$SERVERS_EXTERNAL\""
+echo >>$OUTPUT/clusterinfo.sh "SERVERS_IDS=\"$SERVERS_IDS\""
+echo >>$OUTPUT/clusterinfo.sh "SSH_USER=\"$SSH_USER\""
+echo >>$OUTPUT/clusterinfo.sh "SSH_CMD=\"$SSH_CMD\""
+echo >>$OUTPUT/clusterinfo.sh "SSH_SUFFIX=\"$SSH_SUFFIX\""
+echo >>$OUTPUT/clusterinfo.sh "PREFIX=\"$PREFIX\""
 
 # Export needed variables
 export SERVERS_INTERNAL
 export SERVERS_EXTERNAL
+export SERVERS_IDS
 export SSH_USER="core"
 export SSH_CMD="ssh"
 export SSH_SUFFIX="-i $HOME/.ssh/arangodb_key -l $SSH_USER"
 
-# Wait for do instances
+# Wait for DO instances
 
 sleep 10
 
 ./startDockerCluster.sh
+
