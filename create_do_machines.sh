@@ -89,7 +89,7 @@ if test -z "$SSHID";  then
   if [ ! -f $HOME/.ssh/arangodb_key.pub ];
 
   then
-    echo "No ArangoDB ssh key found. Generating a new one.!"
+    echo "No ArangoDB SSH-Key found. Generating a new one.!"
     ssh-keygen -t dsa -f $OUTPUT/$SSH_KEY -C "arangodb@arangodb.com"
 
     cp $OUTPUT/$SSH_KEY* $HOME/.ssh/
@@ -129,7 +129,7 @@ if test -z "$SSHID";  then
   if [ "$BOOL" -eq 1 ];
 
     then
-      echo "Found ssh key is valid."
+      echo "SSH-Key is valid."
       SSHID=$(sed -n "${COUNTER}p" "$OUTPUT/temp/do_keys_ids")
 
     else
@@ -244,5 +244,4 @@ export SSH_SUFFIX="-i $HOME/.ssh/arangodb_key -l $SSH_USER"
 
 # Wait for do instances
 sleep 10
-
 ./startDockerCluster.sh
