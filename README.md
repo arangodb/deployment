@@ -10,7 +10,6 @@ $ ./create_gce_machines.sh -p cluster-0001 -n 3
 ```
 -->
 ### DO (Digital Ocean)
-For deployment at digital ocean you need a basic version of python installed:
 
 Create a three-instance cluster:
 ```sh
