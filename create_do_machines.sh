@@ -78,13 +78,13 @@ if test -e "$OUTPUT";  then
   exit 1
 fi
 
-wget -q --tries=10 --timeout=20 --spider http://google.com
-if [[ $? -eq 0 ]]; then
-        echo ""
-else
-        echo "No internet connection. Exiting."
-        exit 1
-fi
+#wget -q --tries=10 --timeout=20 --spider http://google.com
+#if [[ $? -eq 0 ]]; then
+#        echo ""
+#else
+#        echo "No internet connection. Exiting."
+#        exit 1
+#fi
 
 mkdir -p "$OUTPUT/temp"
 
@@ -104,17 +104,35 @@ if test -z "$SSHID";  then
     SSHPUB=`cat $HOME/.ssh/arangodb_key.pub`
 
     echo Deploying ssh keypair on digital ocean.
-    SSHID=`curl -s -X POST -H 'Content-Type: application/json' \
+    CURL=`curl -s -X -D $OUTPUT/temp/header POST -H 'Content-Type: application/json' \
          -H "Authorization: Bearer $TOKEN" \
          -d "{\"name\":\"arangodb\",\"public_key\":\"$SSHPUB\"}" "https://api.digitalocean.com/v2/account/keys" \
-         2>/dev/null | python -mjson.tool | grep "\"id\"" | awk '{print $2}' | rev | cut -c 2- | rev`
+         2>/dev/null`
+
+    if [[ -s "$OUTPUT/temp/header" ]] ; then
+      echo "Deployment of new ssh key successful."
+      > $OUTPUT/temp/header
+    else
+      echo "Could not deploy keys. Exiting."
+      exit 1
+    fi ;
+
+    SSHID=`echo $CURL | python -mjson.tool | grep "\"id\"" | awk '{print $2}' | rev | cut -c 2- | rev`
 
   else
 
     echo "ArangoDB SSH-Key found. Try to use $HOME/.ssh/arangodb_key.pub"
     LOCAL_KEY=`cat $HOME/.ssh/arangodb_key.pub | awk '{print $2}'`
-    DOKEYS=`curl -s -X GET -H 'Content-Type: application/json' \
+    DOKEYS=`curl -D $OUTPUT/temp/header -s -X GET -H 'Content-Type: application/json' \
            -H "Authorization: Bearer $TOKEN" "https://api.digitalocean.com/v2/account/keys"`
+
+    if [[ -s "$OUTPUT/temp/header" ]] ; then
+      echo "Fetched deposited keys from digital ocean."
+      > $OUTPUT/temp/header
+    else
+      echo "Could not fetch deposited keys from digital ocean. Exiting."
+      exit 1
+    fi ;
 
     echo $DOKEYS | python -mjson.tool | grep "\"public_key\"" | awk '{print $3}' > "$OUTPUT/temp/do_keys"
     echo $DOKEYS | python -mjson.tool | grep "\"id\"" | awk '{print $2}' | rev | cut -c 2- | rev > $OUTPUT/temp/do_keys_ids
@@ -145,10 +163,19 @@ if test -z "$SSHID";  then
         then
           SSHPUB=`cat $HOME/.ssh/arangodb_key.pub`
           echo Deploying ssh keypair on digital ocean.
-            SSHID=`curl -s -X POST -H 'Content-Type: application/json' \
+            CURL=`curl -s -D $OUTPUT/temp/header -X POST -H 'Content-Type: application/json' \
               -H "Authorization: Bearer $TOKEN" \
-              -d "{\"name\":\"arangodb\",\"public_key\":\"$SSHPUB\"}" "https://api.digitalocean.com/v2/account/keys" \
-              | python -mjson.tool | grep "\"id\"" | awk '{print $2}' | rev | cut -c 2- | rev`
+              -d "{\"name\":\"arangodb\",\"public_key\":\"$SSHPUB\"}" "https://api.digitalocean.com/v2/account/keys"`
+
+          if [[ -s "$OUTPUT/temp/header" ]] ; then
+            echo "Deployment of SSH-Key finished."
+            > $OUTPUT/temp/header
+          else
+            echo "Could not deploy SSH-Key. Exiting."
+            exit 1
+          fi ;
+
+          SSHID=`echo $CURL | python -mjson.tool | grep "\"id\"" | awk '{print $2}' | rev | cut -c 2- | rev`
 
         else
           echo "Please remove $HOME/.ssh/arangodb_key.pub and re-run the script."
@@ -169,10 +196,18 @@ CURL=""
 function createMachine () {
   echo "creating machine $PREFIX$1"
 
-  CURL=`curl -s --request POST "https://api.digitalocean.com/v2/droplets" \
+  CURL=`curl -s -D $OUTPUT/temp/header -D $OUTPUT/temp/header$1 --request POST "https://api.digitalocean.com/v2/droplets" \
        --header "Content-Type: application/json" \
        --header "Authorization: Bearer $TOKEN" \
        --data "{\"region\":\"$REGION\", \"image\":\"$IMAGE\", \"size\":\"$SIZE\", \"name\":\"$PREFIX$1\", \"ssh_keys\":[\"$SSHID\"], \"private_networking\":\"true\" }" 2>/dev/null`
+
+  if [[ -s "$OUTPUT/temp/header$1" ]] ; then
+    echo "Machine $PREFIX$1 created."
+    > $OUTPUT/temp/header$1
+  else
+    echo "Could not create machine $PREFIX$1. Exiting."
+    exit 1
+  fi ;
 
   to_file=`echo $CURL | python -mjson.tool | grep "\"id\"" | head -n 1 | awk '{print $2}' | rev | cut -c 2- | rev`
   echo $to_file > "$OUTPUT/temp/INSTANCEID$1"
@@ -182,8 +217,16 @@ function getMachine () {
   id=`cat $OUTPUT/temp/INSTANCEID$i`
 
   echo "fetching machine information from $PREFIX$1"
-  RESULT2=`curl -s -X GET -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" \
+  RESULT2=`curl -s -D $OUTPUT/temp/header$1 -X GET -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" \
                           "https://api.digitalocean.com/v2/droplets/$id" 2>/dev/null`
+
+  if [[ -s "$OUTPUT/temp/header$1" ]] ; then
+    echo "Machine information from $PREFIX$1 fetched."
+    > $OUTPUT/temp/header$1
+  else
+    echo "Could not fetch machine information from $PREFIX$1. Exiting."
+    exit 1
+  fi ;
 
   a=`echo $RESULT2 | python -mjson.tool | grep "\"ip_address\"" | head -n 1 | awk '{print $2}' | cut -c 2- | rev | cut -c 3- | rev`
   b=`echo $RESULT2 | python -mjson.tool | grep "\"ip_address\"" | head -n 2 | tail -1 |awk '{print $2}' | cut -c 2- | rev | cut -c 3- | rev`
@@ -199,29 +242,24 @@ done
 
 sleep 5
 
-wait
-
 #Wait until machines are ready.
-while :
-do
-   firstid=`cat $OUTPUT/temp/INSTANCEID$i`
-   RESULT=`curl -s -X GET -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" \
-                   "https://api.digitalocean.com/v2/droplets/$firstid" 2>/dev/null`
-   CHECK=`echo $RESULT | python -mjson.tool | grep "\"id\"" | head -n 1 | awk '{print $2}' | rev | cut -c 2- | rev`
-
-   if [ "$CHECK" != "not_found" ];
-   then
-     echo ready: droplets now online.
-     break;
-   else
-     echo waiting: droplets not ready yet...
-   fi
-
-done
-
-wait
-
-sleep 3
+#while :
+#do
+#   firstid=`cat $OUTPUT/temp/INSTANCEID$i`
+#   RESULT=`curl -s -X GET -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" \
+#                   "https://api.digitalocean.com/v2/droplets/$firstid" 2>/dev/null`
+#   CHECK=`echo $RESULT | python -mjson.tool | grep "\"id\"" | head -n 1 | awk '{print $2}' | rev | cut -c 2- | rev`
+#
+#   if [ "$CHECK" != "not_found" ];
+#   then
+#     echo ready: droplets now online.
+#     break;
+#   else
+#     echo waiting: droplets not ready yet...
+#   fi
+#
+#done
+#wait
 
 for i in `seq $NUMBER`; do
   getMachine $i &
