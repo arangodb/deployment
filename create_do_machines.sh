@@ -78,13 +78,13 @@ if test -e "$OUTPUT";  then
   exit 1
 fi
 
-#wget -q --tries=10 --timeout=20 --spider http://google.com
-#if [[ $? -eq 0 ]]; then
-#        echo ""
-#else
-#        echo "No internet connection. Exiting."
-#        exit 1
-#fi
+wget -q --tries=10 --timeout=20 --spider http://google.com
+if [[ $? -eq 0 ]]; then
+        echo ""
+else
+        echo "No internet connection. Exiting."
+        exit 1
+fi
 
 mkdir -p "$OUTPUT/temp"
 
