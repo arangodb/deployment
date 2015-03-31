@@ -47,6 +47,10 @@ echo Starting agency...
 docker run --detach=true -p 4001:4001 --name=agency -v /tmp/cluster/etcd:/data microbox/etcd:latest etcd -name agency > /tmp/cluster/etcd.id
 
 sleep 1
+
+echo Pulling latest version of docker image...
+docker pull neunhoef/arangodb_cluster >/dev/null
+
 echo Initializing agency...
 docker run -it --link=agency:agency --rm neunhoef/arangodb_cluster arangosh --javascript.execute /scripts/init_agency.js > /tmp/cluster/init_agency.log
 echo Starting discovery...
@@ -69,15 +73,18 @@ start() {
 }
 
 PORTTOPDB=`expr 8629 + $NRDBSERVERS - 1`
+
 for p in `seq 8629 $PORTTOPDB` ; do
-    start dbserver $p
+    start dbserver $p &
 done
 PORTTOPCO=`expr 8530 + $NRCOORDINATORS - 1`
 for p in `seq 8530 $PORTTOPCO` ; do
-    start coordinator $p
+    start coordinator $p &
 done
 
 echo Waiting for cluster to come up...
+
+wait
 
 testServer() {
     PORT=$1
