@@ -99,15 +99,21 @@ if test -z "$SSHID";  then
     echo "No ArangoDB SSH-Key found. Generating a new one.!"
     ssh-keygen -t dsa -f $OUTPUT/$SSH_KEY -C "arangodb@arangodb.com"
 
+    if [ $? -eq 0 ]; then
+      echo OK
+    else
+      echo Failed to create SSH-Key. Exiting.
+      exit 1
+    fi
+
     cp $OUTPUT/$SSH_KEY* $HOME/.ssh/
 
     SSHPUB=`cat $HOME/.ssh/arangodb_key.pub`
 
     echo Deploying ssh keypair on digital ocean.
-    CURL=`curl -s -X -D $OUTPUT/temp/header POST -H 'Content-Type: application/json' \
+    CURL=`curl -s -D $OUTPUT/temp/header -X POST -H 'Content-Type: application/json' \
          -H "Authorization: Bearer $TOKEN" \
-         -d "{\"name\":\"arangodb\",\"public_key\":\"$SSHPUB\"}" "https://api.digitalocean.com/v2/account/keys" \
-         2>/dev/null`
+         -d "{\"name\":\"arangodb\",\"public_key\":\"$SSHPUB\"}" "https://api.digitalocean.com/v2/account/keys"`
 
     if [[ -s "$OUTPUT/temp/header" ]] ; then
       echo "Deployment of new ssh key successful."
@@ -154,39 +160,49 @@ if test -z "$SSHID";  then
   if [ "$BOOL" -eq 1 ];
 
     then
-      echo "SSH-Key is valid."
+      echo "SSH-Key is valid and already stored at digital ocean."
       SSHID=$(sed -n "${COUNTER}p" "$OUTPUT/temp/do_keys_ids")
 
     else
-      read -p "Your stored SSH-Key is not deployed. Deploy $HOME/.ssh/arangodb_key.pub? y/n: "
-      if [[ $REPLY =~ ^[Yy]$ ]]
-        then
-          SSHPUB=`cat $HOME/.ssh/arangodb_key.pub`
-          echo Deploying ssh keypair on digital ocean.
-            CURL=`curl -s -D $OUTPUT/temp/header -X POST -H 'Content-Type: application/json' \
-              -H "Authorization: Bearer $TOKEN" \
-              -d "{\"name\":\"arangodb\",\"public_key\":\"$SSHPUB\"}" "https://api.digitalocean.com/v2/account/keys"`
+      echo "Your stored SSH-Key is not deployed."
 
-          if [[ -s "$OUTPUT/temp/header" ]] ; then
-            echo "Deployment of SSH-Key finished."
-            > $OUTPUT/temp/header
-          else
-            echo "Could not deploy SSH-Key. Exiting."
-            exit 1
-          fi ;
+        SSHPUB=`cat $HOME/.ssh/arangodb_key.pub`
+        echo Deploying ssh keypair on digital ocean.
+          CURL=`curl -s -D $OUTPUT/temp/header --request POST -H 'Content-Type: application/json' \
+            -H "Authorization: Bearer $TOKEN" \
+            -d "{\"name\":\"arangodb\",\"public_key\":\"$SSHPUB\"}" "https://api.digitalocean.com/v2/account/keys"`
 
-          SSHID=`echo $CURL | python -mjson.tool | grep "\"id\"" | awk '{print $2}' | rev | cut -c 2- | rev`
-
+        if [[ -s "$OUTPUT/temp/header" ]] ; then
+          echo "Deployment of SSH-Key finished."
+          > $OUTPUT/temp/header
         else
-          echo "Please remove $HOME/.ssh/arangodb_key.pub and re-run the script."
+          echo "Could not deploy SSH-Key. Exiting."
           exit 1
-      fi
+        fi ;
+
+        SSHID=`echo $CURL | python -mjson.tool | grep "\"id\"" | awk '{print $2}' | rev | cut -c 2- | rev`
 
   fi
 
 fi
 
 wait
+
+#check if ssh agent is running
+if [ -n "${SSH_AUTH_SOCK}" ]; then
+    echo "SSH-Agent is running."
+
+    #check if key already added to ssh agent
+    if ssh-add -l | grep arangodb_key > /dev/null ; then
+      echo SSH-Key already added to SSH-Agent;
+    else
+      ssh-add -K $HOME/.ssh/arangodb_key
+    fi
+
+  else
+    echo "No SSH-Agent running. Skipping."
+
+fi
 
 export CLOUDSDK_CONFIG="$OUTPUT/digital_ocean"
 touch $OUTPUT/hosts
@@ -196,7 +212,7 @@ CURL=""
 function createMachine () {
   echo "creating machine $PREFIX$1"
 
-  CURL=`curl -s -D $OUTPUT/temp/header -D $OUTPUT/temp/header$1 --request POST "https://api.digitalocean.com/v2/droplets" \
+  CURL=`curl -s -D $OUTPUT/temp/header$1 --request POST "https://api.digitalocean.com/v2/droplets" \
        --header "Content-Type: application/json" \
        --header "Authorization: Bearer $TOKEN" \
        --data "{\"region\":\"$REGION\", \"image\":\"$IMAGE\", \"size\":\"$SIZE\", \"name\":\"$PREFIX$1\", \"ssh_keys\":[\"$SSHID\"], \"private_networking\":\"true\" }" 2>/dev/null`
