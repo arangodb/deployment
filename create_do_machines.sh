@@ -252,23 +252,42 @@ function createMachine () {
 function getMachine () {
   id=`cat $OUTPUT/temp/INSTANCEID$i`
 
-  echo "fetching machine information from $PREFIX$1"
-  RESULT2=`curl -s -S -D $OUTPUT/temp/header$1 -X GET -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" \
-                          "https://api.digitalocean.com/v2/droplets/$id" 2>>$OUTPUT/curl.error`
+  #while loop until ip addresses are fetched successfully
 
-  if [[ -s "$OUTPUT/temp/header$1" ]] ; then
-    echo "Machine information from $PREFIX$1 fetched."
-    > $OUTPUT/temp/header$1
-  else
-    echo "Could not fetch machine information from $PREFIX$1. Exiting."
-    exit 1
-  fi ;
+  while :
+  do
 
-  a=`echo $RESULT2 | python -mjson.tool | grep "\"ip_address\"" | head -n 1 | awk '{print $2}' | cut -c 2- | rev | cut -c 3- | rev`
-  b=`echo $RESULT2 | python -mjson.tool | grep "\"ip_address\"" | head -n 2 | tail -1 |awk '{print $2}' | cut -c 2- | rev | cut -c 3- | rev`
+    if [[ -s "$OUTPUT/temp/INTERNAL$1" ]] ; then
+      echo "Machine information from $PREFIX$1 fetched."
+      break
+    else
+      RESULT2=`curl -s -S -D $OUTPUT/temp/header$1 -X GET -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" \
+                              "https://api.digitalocean.com/v2/droplets/$id" 2>>$OUTPUT/curl.error`
 
-  echo $a > "$OUTPUT/temp/INTERNAL$1"
-  echo $b > "$OUTPUT/temp/EXTERNAL$1"
+      echo $RESULT2 >> $OUTPUT/curl.log
+
+      if [[ -s "$OUTPUT/temp/header$1" ]] ; then
+        echo "Getting status information from machine: $PREFIX$1."
+        > $OUTPUT/temp/header$1
+      else
+        echo "Could not fetch machine information from $PREFIX$1. Exiting."
+        exit 1
+      fi ;
+
+      a=`echo $RESULT2 | python -mjson.tool | grep "\"ip_address\"" | head -n 1 | awk '{print $2}' | cut -c 2- | rev | cut -c 3- | rev`
+      b=`echo $RESULT2 | python -mjson.tool | grep "\"ip_address\"" | head -n 2 | tail -1 |awk '{print $2}' | cut -c 2- | rev | cut -c 3- | rev`
+
+      if [ -n "$a" ]; then
+        echo $a > "$OUTPUT/temp/INTERNAL$1"
+      fi
+      if [ -n "$b" ]; then
+        echo $b > "$OUTPUT/temp/EXTERNAL$1"
+      fi
+    fi ;
+
+    sleep 2
+
+  done
 }
 
 
@@ -277,6 +296,42 @@ for i in `seq $NUMBER`; do
 done
 
 wait
+
+for i in `seq $NUMBER`; do
+  getMachine $i &
+done
+
+wait
+
+while :
+do
+
+  FINISHED=0
+
+  for i in `seq $NUMBER`; do
+
+    if [ -s "$OUTPUT/temp/INTERNAL$i" ] ; then
+      echo "Machine $PREFIX$i finished"
+      FINISHED=1
+    else
+      echo "Machine $PREFIX$i not ready yet."
+      FINISHED=0
+      break
+    fi
+
+  done
+
+  if [ $FINISHED == 1 ] ; then
+    echo "All machines are set up"
+    break
+  fi
+
+  sleep 1
+
+done
+
+wait
+
 
 #Wait until machines are ready.
 #while :
@@ -296,12 +351,6 @@ wait
 #
 #done
 #wait
-
-for i in `seq $NUMBER`; do
-  getMachine $i &
-done
-
-wait
 
 for i in `seq $NUMBER`; do
   a=`cat $OUTPUT/temp/INTERNAL$i`
