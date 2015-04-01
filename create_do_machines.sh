@@ -35,8 +35,28 @@ SSH_KEY="arangodb_key"
 SSH_CMD="ssh"
 SSH_SUFFIX="-i $HOME/.ssh/arangodb_key -l $SSH_USER"
 
-while getopts ":z:m:n:d:s:" opt; do
+while getopts ":z:m:n:d:s:h" opt; do
   case $opt in
+    h)
+      cat <<EOT
+This starts multiple coreos instances using digital ocean cloud platform
+
+Prerequisites:
+The following environment variables are used:
+  TOKEN  : digital ocean api-token (as environment variable)
+
+Optional prerequisites:
+  REGION : size of the server (e.g. -z nyc3)
+  SIZE   : size/machine-type of the instance (e.g. -m 512mb)
+  NUMBER : count of machines to create (e.g. -n 3)
+  OUTPUT : local output log folder (e.g. -d /my/directory)
+  SSHID  : id of your existing ssh keypair. if no id is set, a new
+           keypair will be generated and transfered to your created
+           instance (e.g. -s 123456)
+  PREFIX : prefix for your machine names (e.g. "export PREFIX="arangodb-test-$$-")
+EOT
+      exit 0
+      ;;
     z)
       REGION="$OPTARG"
       ;;
@@ -111,7 +131,7 @@ if test -z "$SSHID";  then
     SSHPUB=`cat $HOME/.ssh/arangodb_key.pub`
 
     echo Deploying ssh keypair on digital ocean.
-    CURL=`curl -s -D $OUTPUT/temp/header -X POST -H 'Content-Type: application/json' \
+    CURL=`curl -s -S -D $OUTPUT/temp/header -X POST -H 'Content-Type: application/json' \
          -H "Authorization: Bearer $TOKEN" \
          -d "{\"name\":\"arangodb\",\"public_key\":\"$SSHPUB\"}" "https://api.digitalocean.com/v2/account/keys"`
 
@@ -129,7 +149,7 @@ if test -z "$SSHID";  then
 
     echo "ArangoDB SSH-Key found. Try to use $HOME/.ssh/arangodb_key.pub"
     LOCAL_KEY=`cat $HOME/.ssh/arangodb_key.pub | awk '{print $2}'`
-    DOKEYS=`curl -D $OUTPUT/temp/header -s -X GET -H 'Content-Type: application/json' \
+    DOKEYS=`curl -D $OUTPUT/temp/header -s -S -X GET -H 'Content-Type: application/json' \
            -H "Authorization: Bearer $TOKEN" "https://api.digitalocean.com/v2/account/keys"`
 
     if [[ -s "$OUTPUT/temp/header" ]] ; then
@@ -168,7 +188,7 @@ if test -z "$SSHID";  then
 
         SSHPUB=`cat $HOME/.ssh/arangodb_key.pub`
         echo Deploying ssh keypair on digital ocean.
-          CURL=`curl -s -D $OUTPUT/temp/header --request POST -H 'Content-Type: application/json' \
+          CURL=`curl -s -S -D $OUTPUT/temp/header --request POST -H 'Content-Type: application/json' \
             -H "Authorization: Bearer $TOKEN" \
             -d "{\"name\":\"arangodb\",\"public_key\":\"$SSHPUB\"}" "https://api.digitalocean.com/v2/account/keys"`
 
@@ -196,7 +216,7 @@ if [ -n "${SSH_AUTH_SOCK}" ]; then
     if ssh-add -l | grep arangodb_key > /dev/null ; then
       echo SSH-Key already added to SSH-Agent;
     else
-      ssh-add -K $HOME/.ssh/arangodb_key
+      ssh-add $HOME/.ssh/arangodb_key
     fi
 
   else
@@ -212,10 +232,10 @@ CURL=""
 function createMachine () {
   echo "creating machine $PREFIX$1"
 
-  CURL=`curl -s -D $OUTPUT/temp/header$1 --request POST "https://api.digitalocean.com/v2/droplets" \
+  CURL=`curl -s -S -D $OUTPUT/temp/header$1 --request POST "https://api.digitalocean.com/v2/droplets" \
        --header "Content-Type: application/json" \
        --header "Authorization: Bearer $TOKEN" \
-       --data "{\"region\":\"$REGION\", \"image\":\"$IMAGE\", \"size\":\"$SIZE\", \"name\":\"$PREFIX$1\", \"ssh_keys\":[\"$SSHID\"], \"private_networking\":\"true\" }" 2>/dev/null`
+       --data "{\"region\":\"$REGION\", \"image\":\"$IMAGE\", \"size\":\"$SIZE\", \"name\":\"$PREFIX$1\", \"ssh_keys\":[\"$SSHID\"], \"private_networking\":\"true\" }" 2>>$OUTPUT/curl.error`
 
   if [[ -s "$OUTPUT/temp/header$1" ]] ; then
     echo "Machine $PREFIX$1 created."
@@ -233,8 +253,8 @@ function getMachine () {
   id=`cat $OUTPUT/temp/INSTANCEID$i`
 
   echo "fetching machine information from $PREFIX$1"
-  RESULT2=`curl -s -D $OUTPUT/temp/header$1 -X GET -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" \
-                          "https://api.digitalocean.com/v2/droplets/$id" 2>/dev/null`
+  RESULT2=`curl -s -S -D $OUTPUT/temp/header$1 -X GET -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" \
+                          "https://api.digitalocean.com/v2/droplets/$id" 2>>$OUTPUT/curl.error`
 
   if [[ -s "$OUTPUT/temp/header$1" ]] ; then
     echo "Machine information from $PREFIX$1 fetched."
@@ -256,13 +276,13 @@ for i in `seq $NUMBER`; do
   createMachine $i &
 done
 
-sleep 5
+wait
 
 #Wait until machines are ready.
 #while :
 #do
 #   firstid=`cat $OUTPUT/temp/INSTANCEID$i`
-#   RESULT=`curl -s -X GET -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" \
+#   RESULT=`curl -s -S -X GET -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" \
 #                   "https://api.digitalocean.com/v2/droplets/$firstid" 2>/dev/null`
 #   CHECK=`echo $RESULT | python -mjson.tool | grep "\"id\"" | head -n 1 | awk '{print $2}' | rev | cut -c 2- | rev`
 #
@@ -280,8 +300,6 @@ sleep 5
 for i in `seq $NUMBER`; do
   getMachine $i &
 done
-
-sleep 3
 
 wait
 
