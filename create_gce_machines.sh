@@ -19,8 +19,11 @@ NUMBER="3"
 OUTPUT="gce"
 PROJECT=""
 SSH_KEY_PATH=""
+DEFAULT_KEY_PATH="$OUTPUT/arangodb_gce_key"
 
-while getopts ":z:m:n:d:p:" opt; do
+DEPLOY_KEY=0
+
+while getopts ":z:m:n:d:p:s:" opt; do
   case $opt in
     z)
       ZONE="$OPTARG"
@@ -70,7 +73,7 @@ if test -e "$OUTPUT";  then
   exit 1
 fi
 
-mkdir "$OUTPUT"
+mkdir -p "$OUTPUT/temp"
 
 export CLOUDSDK_CONFIG="$OUTPUT/gce"
 
@@ -80,20 +83,37 @@ gcloud auth login
 
 if test -z "$SSH_KEY_PATH";
 then
-  echo "No SSH-Key-Path given. Creating a new SSH-Key."
 
-  ssh-keygen -t dsa -f gce/ssh-key -C "arangodb@arangodb.com"
-
-  if [ $? -eq 0 ]; then
-    echo Created SSH-Key.
+  if [[ -s "$HOME/.ssh/arangodb_gce_key" ]] ; then
+    echo "ArangoDB GCE SSH-Key existing."
+    DEFAULT_KEY_PATH="$HOME/.ssh/arangodb_gce_key"
   else
-    echo Failed to create SSH-Key. Exiting.
-    exit 1
-  fi
+    echo "No SSH-Key-Path given. Creating a new SSH-Key."
+    ssh-keygen -t dsa -f "$DEFAULT_KEY_PATH" -C "arangodb@arangodb.com"
+
+    if [ $? -eq 0 ]; then
+      echo Created SSH-Key.
+    else
+      echo Failed to create SSH-Key. Exiting.
+      exit 1
+    fi
+    DEPLOY_KEY=1
+    cp $DEFAULT_KEY_PATH* $HOME/.ssh/
+    DEFAULT_KEY_PATH="$HOME/.ssh/arangodb_gce_key"
+  fi ;
 
 else
   #Check if SSH-Files are available and valid
-  ssh-keygen -l -f $SSH_KEY_PATH
+  echo "Trying to use $SSH_KEY_PATH."
+  DEFAULT_KEY_PATH="$SSH_KEY_PATH"
+  ssh-keygen -l -f "$DEFAULT_KEY_PATH"
+
+  read -p "Deploy your SSH-Key? Only needed if not already deployed: y/n " -n 1 -r
+    echo
+  if [[ $REPLY =~ ^[Yy]$ ]]
+  then
+    DEPLOY_KEY=1
+  fi
 
   if [ $? -eq 0 ]; then
     echo SSH-Key is valid.
@@ -101,20 +121,18 @@ else
     echo Failed to validate SSH-Key. Exiting.
     exit 1
   fi
-
 fi
 
-exit 1
 
 #check if ssh agent is running
 if [ -n "${SSH_AUTH_SOCK}" ]; then
     echo "SSH-Agent is running."
 
     #check if key already added to ssh agent
-    if ssh-add -l | grep arangodb_key > /dev/null ; then
+    if ssh-add -l | grep $DEFAULT_KEY_PATH > /dev/null ; then
       echo SSH-Key already added to SSH-Agent;
     else
-      ssh-add -K $HOME/.ssh/arangodb_key
+      ssh-add "$DEFAULT_KEY_PATH"
     fi
 
   else
@@ -129,18 +147,18 @@ function createMachine () {
   a=`echo $INSTANCE | awk '{print $4}'`
   b=`echo $INSTANCE | awk '{print $5}'`
 
-  SERVERS_INTERNAL_GCE[$1-1]="$a"
-  SERVERS_EXTERNAL_GCE[$1-1]="$b"
-
+  echo $a > "$OUTPUT/temp/INTERNAL$1"
+  echo $b > "$OUTPUT/temp/EXTERNAL$1"
 }
 
 #CoreOS PARAMS
 declare -a SERVERS_EXTERNAL_GCE
 declare -a SERVERS_INTERNAL_GCE
+declare -a SERVERS_NAMES_GCE
+
 SSH_USER="arangodb"
 SSH_CMD="gcloud compute ssh"
 SSH_PARAM="/bin/true"
-SSH_SUFFIX="--ssh-key-file gce/ssh-key --project "$PROJECT" --zone "$ZONE" --command "$SSH_PARAM" "arangodb@${PREFIX}1""
 
 for i in `seq $NUMBER`; do
   createMachine $i &
@@ -149,7 +167,70 @@ done
 
 wait
 
+while :
+do
+
+  FINISHED=0
+
+  for i in `seq $NUMBER`; do
+
+    if [ -s "$OUTPUT/temp/INTERNAL$i" ] ; then
+      echo "Machine $PREFIX$i finished"
+      SERVERS_INTERNAL_GCE[`expr $i - 1`]=`cat "$OUTPUT/temp/INTERNAL$i"`
+      SERVERS_EXTERNAL_GCE[`expr $i - 1`]=`cat "$OUTPUT/temp/EXTERNAL$i"`
+      SERVERS_NAMES_GCE[`expr $i - 1`]=$PREFIX$i
+      FINISHED=1
+    else
+      echo "Machine $PREFIX$i not ready yet."
+      FINISHED=0
+      break
+    fi
+
+  done
+
+  if [ $FINISHED == 1 ] ; then
+    echo "All machines are set up"
+    break
+  fi
+
+  sleep 1
+
+done
+
+rm -rf $OUTPUT/temp
+
+echo Internal IPs: ${SERVERS_INTERNAL_GCE[@]}
+echo External IPs: ${SERVERS_EXTERNAL_GCE[@]}
+echo IDs         : ${SERVERS_NAMES_GCE[@]}
+
+SERVERS_INTERNAL="${SERVERS_INTERNAL_GCE[@]}"
+SERVERS_EXTERNAL="${SERVERS_EXTERNAL_GCE[@]}"
+SERVERS_IDS="${SERVERS_IDS_GCE[@]}"
+
+# Write data to file:
+echo > $OUTPUT/clusterinfo.sh "SERVERS_INTERNAL=\"$SERVERS_INTERNAL\""
+echo >>$OUTPUT/clusterinfo.sh "SERVERS_EXTERNAL=\"$SERVERS_EXTERNAL\""
+echo >>$OUTPUT/clusterinfo.sh "SERVERS_IDS=\"$SERVERS_IDS\""
+echo >>$OUTPUT/clusterinfo.sh "SSH_USER=\"$SSH_USER\""
+echo >>$OUTPUT/clusterinfo.sh "SSH_CMD=\"$SSH_CMD\""
+echo >>$OUTPUT/clusterinfo.sh "SSH_SUFFIX=\"$SSH_SUFFIX\""
+echo >>$OUTPUT/clusterinfo.sh "PREFIX=\"$PREFIX\""
+
+# Export needed variables
+export SERVERS_INTERNAL
+export SERVERS_EXTERNAL
+export SERVERS_IDS
+export SSH_USER="arangodb"
+export SSH_CMD="ssh"
+export SSH_SUFFIX="-i $DEFAULT_KEY_PATH -l $SSH_USER"
+
 # Have to wait until google deployed keys on all instances.
 sleep 20
-gcloud compute ssh --ssh-key-file gce/ssh-key --project "$PROJECT" --zone "$ZONE" --command "/bin/true" "arangodb@${PREFIX}1"
 
+if [ $DEPLOY_KEY == 1 ]; then
+  gcloud compute ssh --ssh-key-file "$DEFAULT_KEY_PATH" --project "$PROJECT" --zone "$ZONE" --command "/bin/true" "arangodb@${PREFIX}1"
+else
+  echo "No need for key deployment."
+fi
+
+./startDockerCluster.sh
