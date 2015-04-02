@@ -13,6 +13,7 @@ $ ./create_gce_machines.sh -p cluster-0001 -n 3
 
 Create a three-instance cluster:
 ```sh
+$ chmod +x create_do_machines.sh
 $ export TOKEN="your_token"
 $ ./create_do_machines.sh -n 3
 ```
