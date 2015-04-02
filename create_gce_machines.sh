@@ -225,7 +225,8 @@ export SSH_CMD="ssh"
 export SSH_SUFFIX="-i $DEFAULT_KEY_PATH -l $SSH_USER"
 
 # Have to wait until google deployed keys on all instances.
-sleep 20
+echo "Now waiting for Google SSH-Key distribution."
+sleep 40
 
 if [ $DEPLOY_KEY == 1 ]; then
   gcloud compute ssh --ssh-key-file "$DEFAULT_KEY_PATH" --project "$PROJECT" --zone "$ZONE" --command "/bin/true" "arangodb@${PREFIX}1"
