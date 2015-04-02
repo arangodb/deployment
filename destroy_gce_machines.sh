@@ -15,11 +15,11 @@ set -u
 OUTPUT="gce"
 PROJECT=""
 
-while getopts ":p:d:" opt; do
+while getopts ":d:" opt; do
   case $opt in
-    p)
-      OUTPUT="$OPTARG"
-      ;;
+#    p)
+#      PROJECT="$OPTARG"
+#      ;;
     d)
       OUTPUT="$OPTARG"
       ;;
@@ -39,6 +39,11 @@ if [ ! -e "$OUTPUT" ] ;  then
   exit 1
 fi
 
+#if test -z "$PROJECT";  then
+#  echo "$0: you must supply a project with '-p'"
+#  exit 1
+#fi
+
 . $OUTPUT/clusterinfo.sh
 
 declare -a SERVERS_IDS=(${SERVERS_IDS[@]})
@@ -51,11 +56,6 @@ echo "MACHINE PREFIX: $PREFIX"
 
 if test -z "$TOKEN";  then
   echo "$0: you must supply a token as environment variable with 'export TOKEN='your_token''"
-  exit 1
-fi
-
-if test -z "$PROJECT";  then
-  echo "$0: you must supply a project with '-p'"
   exit 1
 fi
 
@@ -75,7 +75,7 @@ function deleteMachine () {
   echo "deleting machine $PREFIX$1"
   id=${SERVERS_IDS[`expr $1 - 1`]}
 
-  gcloud compute instances delete "$id"
+  gcloud compute instances delete "$id" --zone "$ZONE" -q
 }
 
 for i in `seq $NUMBER`; do

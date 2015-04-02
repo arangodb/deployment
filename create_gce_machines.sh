@@ -154,7 +154,7 @@ function createMachine () {
 #CoreOS PARAMS
 declare -a SERVERS_EXTERNAL_GCE
 declare -a SERVERS_INTERNAL_GCE
-declare -a SERVERS_NAMES_GCE
+declare -a SERVERS_IDS_GCE
 
 SSH_USER="arangodb"
 SSH_CMD="gcloud compute ssh"
@@ -178,7 +178,7 @@ do
       echo "Machine $PREFIX$i finished"
       SERVERS_INTERNAL_GCE[`expr $i - 1`]=`cat "$OUTPUT/temp/INTERNAL$i"`
       SERVERS_EXTERNAL_GCE[`expr $i - 1`]=`cat "$OUTPUT/temp/EXTERNAL$i"`
-      SERVERS_NAMES_GCE[`expr $i - 1`]=$PREFIX$i
+      SERVERS_IDS_GCE[`expr $i - 1`]=$PREFIX$i
       FINISHED=1
     else
       echo "Machine $PREFIX$i not ready yet."
@@ -201,7 +201,7 @@ rm -rf $OUTPUT/temp
 
 echo Internal IPs: ${SERVERS_INTERNAL_GCE[@]}
 echo External IPs: ${SERVERS_EXTERNAL_GCE[@]}
-echo IDs         : ${SERVERS_NAMES_GCE[@]}
+echo IDs         : ${SERVERS_IDS_GCE[@]}
 
 SERVERS_INTERNAL="${SERVERS_INTERNAL_GCE[@]}"
 SERVERS_EXTERNAL="${SERVERS_EXTERNAL_GCE[@]}"
@@ -215,6 +215,8 @@ echo >>$OUTPUT/clusterinfo.sh "SSH_USER=\"$SSH_USER\""
 echo >>$OUTPUT/clusterinfo.sh "SSH_CMD=\"$SSH_CMD\""
 echo >>$OUTPUT/clusterinfo.sh "SSH_SUFFIX=\"$SSH_SUFFIX\""
 echo >>$OUTPUT/clusterinfo.sh "PREFIX=\"$PREFIX\""
+echo >>$OUTPUT/clusterinfo.sh "ZONE=\"$ZONE\""
+echo >>$OUTPUT/clusterinfo.sh "PROJECT=\"$PROJECT\""
 
 # Export needed variables
 export SERVERS_INTERNAL
@@ -223,15 +225,19 @@ export SERVERS_IDS
 export SSH_USER="arangodb"
 export SSH_CMD="ssh"
 export SSH_SUFFIX="-i $DEFAULT_KEY_PATH -l $SSH_USER"
+export ZONE
+export PROJECT
 
 # Have to wait until google deployed keys on all instances.
 echo "Now waiting for Google SSH-Key distribution."
-sleep 40
+sleep 45
 
 if [ $DEPLOY_KEY == 1 ]; then
   gcloud compute ssh --ssh-key-file "$DEFAULT_KEY_PATH" --project "$PROJECT" --zone "$ZONE" --command "/bin/true" "arangodb@${PREFIX}1"
 else
   echo "No need for key deployment."
 fi
+
+sleep 15
 
 ./startDockerCluster.sh
