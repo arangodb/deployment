@@ -14,7 +14,7 @@
 #   SSH     : path to your already on gce deployed ssh key (e.g. -s /my/directory/mykey)
 
 ZONE="europe-west1-b"
-MACHINE_TYPE="f1-micro"
+MACHINE_TYPE="n1-standard-2"
 NUMBER="3"
 OUTPUT="gce"
 PROJECT=""
