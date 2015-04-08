@@ -21,7 +21,7 @@ DEFAULT_KEY_PATH="$OUTPUT/arangodb_azure_key"
 
 DEPLOY_KEY=0
 
-while getopts ":z:m:n:d:s:h:" opt; do
+while getopts ":z:m:n:d:s:h" opt; do
   case $opt in
     h)
     cat <<EOT
@@ -145,7 +145,9 @@ function getMachine () {
   state=""
 
   while [ "$state" != "ReadyRole" ]; do
+
     instance=`azure vm show "$PREFIX$1"`
+echo $instance
     state=`echo "$instance" | grep InstanceStatus | awk '{print $3}' | cut -c 2- | rev | cut -c 2- | rev`
   done
 
@@ -163,7 +165,7 @@ function getMachine () {
 function createMachine () {
   echo "creating machine $PREFIX$1"
   azure vm create --vm-size "$MACHINE_TYPE" --userName "core" --ssh 22 --ssh-cert "${DEFAULT_KEY_PATH}.pem" \
-  --no-ssh-password "$PREFIX$1" "$IMAGE"
+  --virtual-network-name "arangodb-test-vnet" --no-ssh-password "$PREFIX$1" "$IMAGE"
 
   if [ $? -eq 0 ]; then
     echo
@@ -171,6 +173,10 @@ function createMachine () {
     echo Failed to create machine $PREFIX$1. Retrying.
       createMachine $i &
   fi
+}
+
+function createEndpoint () {
+  azure vm endpoint create "$PREFIX$1" 8529 8529
 }
 
 #CoreOS PARAMS
@@ -181,6 +187,9 @@ declare -a SERVERS_IDS_AZURE
 SSH_USER="arangodb"
 SSH_CMD="gcloud compute ssh"
 SSH_PARAM="/bin/true"
+
+echo "Creating virtual network"
+azure network vnet create "arangodb-test-vnet" --location "$ZONE"
 
 for i in `seq $NUMBER`; do
   echo "Creating services for virtual machines."
@@ -233,10 +242,15 @@ do
 
 done
 
+wait
+
 for i in `seq $NUMBER`; do
   sleep 2
-  azure vm endpoint create "$PREFIX$i" 8529 8529
+  createEndpoint $i &
+#  azure vm endpoint create "$PREFIX$i" 8529 8529
 done
+
+wait
 
 rm -rf $OUTPUT/temp
 
