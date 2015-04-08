@@ -1,14 +1,10 @@
 #!/bin/bash
 
-# This starts multiple coreos instances using google compute engine
-#
-# Prerequisites:
-# The following environment variables are used:
-#   PROJECT : project id of your designated project (e.g. -p "project_id");
+# This starts multiple coreos instances using microsoft azure
 #
 # Optional prerequisites:
-#   ZONE  : size of the server (e.g. -z europe-west1-b)
-#   SIZE    : size/machine-type of the instance (e.g. -m n1-standard-2)
+#   ZONE  : size of the server (e.g. -z "US West")
+#   SIZE    : size/machine-type of the instance (e.g. -m Medium)
 #   NUMBER  : count of machines to create (e.g. -n 3)
 #   OUTPUT  : local output log folder (e.g. -d /my/directory)
 #   SSH     : path to your already on azure deployed ssh key (e.g. -s /my/directory/mykey)
@@ -23,8 +19,22 @@ DEFAULT_KEY_PATH="$OUTPUT/arangodb_azure_key"
 
 DEPLOY_KEY=0
 
-while getopts ":z:m:n:d:s:" opt; do
+while getopts ":z:m:n:d:s:h:" opt; do
   case $opt in
+    h)
+    cat <<EOT
+This starts multiple coreos instances using microsoft azure
+
+Optional prerequisites:
+  ZONE  : size of the server (e.g. -z "US West")
+  SIZE    : size/machine-type of the instance (e.g. -m Medium)
+  NUMBER  : count of machines to create (e.g. -n 3)
+  OUTPUT  : local output log folder (e.g. -d /my/directory)
+  SSH     : path to your already on azure deployed ssh key (e.g. -s /my/directory/mykey)
+
+EOT
+    exit 0
+    ;;
     z)
       ZONE="$OPTARG"
       ;;
@@ -152,6 +162,13 @@ function createMachine () {
   echo "creating machine $PREFIX$1"
   azure vm create --vm-size "$MACHINE_TYPE" --userName "core" --ssh 22 --ssh-cert "${DEFAULT_KEY_PATH}.pem" \
   --location "$ZONE" --no-ssh-password "$PREFIX$1" "$IMAGE"
+
+  if [ $? -eq 0 ]; then
+    echo
+  else
+    echo Failed to create machine $PREFIX$1. Exiting.
+    exit 1
+  fi
 }
 
 #CoreOS PARAMS
@@ -165,6 +182,8 @@ SSH_PARAM="/bin/true"
 
 for i in `seq $NUMBER`; do
   createMachine $i &
+  # sleep because azure cant spawn multiple services at the same time
+  sleep 1
 done
 
 wait
