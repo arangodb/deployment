@@ -1,10 +1,6 @@
 #!/bin/bash
 
-# This stops multiple coreos instances using digital ocean cloud platform
-#
-# Prerequisites:
-# The following environment variables are used:
-#   TOKEN  : digital ocean api-token (as environment variable)
+# This stops multiple coreos instances using google compute engine
 #
 # Optional prerequisites:
 #   OUTPUT : local output log folder (e.g. -d my-directory)
@@ -17,9 +13,6 @@ PROJECT=""
 
 while getopts ":d:" opt; do
   case $opt in
-#    p)
-#      PROJECT="$OPTARG"
-#      ;;
     d)
       OUTPUT="$OPTARG"
       ;;
@@ -39,11 +32,6 @@ if [ ! -e "$OUTPUT" ] ;  then
   exit 1
 fi
 
-#if test -z "$PROJECT";  then
-#  echo "$0: you must supply a project with '-p'"
-#  exit 1
-#fi
-
 . $OUTPUT/clusterinfo.sh
 
 declare -a SERVERS_IDS=(${SERVERS_IDS[@]})
@@ -61,10 +49,8 @@ fi
 
 wait
 
-export CLOUDSDK_CONFIG="$OUTPUT/digital_ocean"
+export CLOUDSDK_CONFIG="$OUTPUT/gce"
 touch $OUTPUT/hosts
-touch $OUTPUT/curl.log
-CURL=""
 
 #google auth
 gcloud config set account arangodb
