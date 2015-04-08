@@ -6,7 +6,7 @@
 #   TOKEN  : digital ocean api-token (as environment variable)
 #
 # Optional prerequisites:
-#   REGION : size of the server (e.g. -z nyc3)
+#   REGION : site of the server (e.g. -z nyc3)
 #   SIZE   : size/machine-type of the instance (e.g. -m 512mb)
 #   NUMBER : count of machines to create (e.g. -n 3)
 #   OUTPUT : local output log folder (e.g. -d /my/directory)
@@ -46,7 +46,7 @@ The following environment variables are used:
   TOKEN  : digital ocean api-token (as environment variable)
 
 Optional prerequisites:
-  REGION : size of the server (e.g. -z nyc3)
+  REGION : site of the server (e.g. -z nyc3)
   SIZE   : size/machine-type of the instance (e.g. -m 512mb)
   NUMBER : count of machines to create (e.g. -n 3)
   OUTPUT : local output log folder (e.g. -d /my/directory)

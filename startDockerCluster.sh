@@ -34,9 +34,11 @@
 # via ssh using the following command for server number i:
 #   ${SSH_CMD} "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL[i]} ${SSH_SUFFIX} docker run ...
 
+DOCKER_IMAGE_NAME=neunhoef/arangodb_cluster:2.5.1-fix
+
 # Two docker images are needed: 
 #  microbox/etcd for the agency and
-#  neunhoef/arangodb_cluster for
+#  ${DOCKER_IMAGE_NAME} for
 #   - arangod
 #   - arnagosh
 #   - some helper scripts
@@ -141,9 +143,9 @@ $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL[0]} $SSH_SUFFIX "docker ru
 
 sleep 1
 echo Initializing agency...
-$SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL[0]} $SSH_SUFFIX "docker run --link=agency:agency --rm neunhoef/arangodb_cluster arangosh --javascript.execute /scripts/init_agency.js > /home/$SSH_USER/init_agency.log"
+$SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL[0]} $SSH_SUFFIX "docker run --link=agency:agency --rm ${DOCKER_IMAGE_NAME} arangosh --javascript.execute /scripts/init_agency.js > /home/$SSH_USER/init_agency.log"
 echo Starting discovery...
-$SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL[0]} $SSH_SUFFIX "docker run --detach=true --link=agency:agency --name discovery neunhoef/arangodb_cluster arangosh --javascript.execute scripts/discover.js > /home/$SSH_USER/discovery.log"
+$SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL[0]} $SSH_SUFFIX "docker run --detach=true --link=agency:agency --name discovery ${DOCKER_IMAGE_NAME} arangosh --javascript.execute scripts/discover.js > /home/$SSH_USER/discovery.log"
 
 start_dbserver () {
     i=$1
@@ -152,7 +154,7 @@ start_dbserver () {
     $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL[$i]} $SSH_SUFFIX \
     docker run --detach=true -v $DBSERVER_DATA:/data \
      -v $DBSERVER_LOGS:/logs --net=host \
-     --name=dbserver$PORT_DBSERVER neunhoef/arangodb_cluster \
+     --name=dbserver$PORT_DBSERVER ${DOCKER_IMAGE_NAME} \
       arangod --database.directory /data \
       --cluster.agency-endpoint tcp://${SERVERS_INTERNAL[0]}:4001 \
       --cluster.my-address tcp://${SERVERS_INTERNAL[$i]}:$PORT_DBSERVER \
@@ -169,7 +171,7 @@ start_coordinator () {
      docker run --detach=true -v $COORDINATOR_DATA:/data \
         -v $COORDINATOR_LOGS:/logs --net=host \
         --name=coordinator$PORT_COORDINATOR \
-        neunhoef/arangodb_cluster \
+        ${DOCKER_IMAGE_NAME} \
       arangod --database.directory /data \
        --cluster.agency-endpoint tcp://${SERVERS_INTERNAL[0]}:4001 \
        --cluster.my-address tcp://${SERVERS_INTERNAL[$i]}:$PORT_COORDINATOR \
@@ -216,11 +218,8 @@ for i in `seq 0 $LASTCOORDINATOR` ; do
 done
 
 echo Bootstrapping DBServers...
-for i in `seq 0 $LASTDBSERVER` ; do
-    echo Doing ${SERVERS_EXTERNAL[$i]}:$PORT_DBSERVER
-    curl -s -X POST "http://${SERVERS_EXTERNAL[$i]}:$PORT_DBSERVER/_admin/cluster/bootstrapDbServers" \
-         -d '{"isRelaunch":false}' >/dev/null 2>&1
-done
+curl -s -X POST "http://${SERVERS_EXTERNAL[0]}:$PORT_COORDINATOR/_admin/cluster/bootstrapDbServers" \
+     -d '{"isRelaunch":false}' >/dev/null 2>&1
 
 echo Running DB upgrade on cluster...
 curl -s -X POST "http://${SERVERS_EXTERNAL[0]}:$PORT_COORDINATOR/_admin/cluster/upgradeClusterDatabase" \
@@ -230,11 +229,13 @@ echo Bootstrapping Coordinators...
 for i in `seq 0 $LASTCOORDINATOR` ; do
     echo Doing ${SERVERS_EXTERNAL[$i]}:$PORT_COORDINATOR
     curl -s -X POST "http://${SERVERS_EXTERNAL[$i]}:$PORT_COORDINATOR/_admin/cluster/bootstrapCoordinator" \
-         -d '{"isRelaunch":false}' >/dev/null 2>&1
+         -d '{"isRelaunch":false}' >/dev/null 2>&1 &
 done
+
+wait
 
 echo Done, your cluster is ready at
 for i in `seq 0 $LASTCOORDINATOR` ; do
-    echo "   docker run -it --rm --net=host neunhoef/arangodb_cluster arangosh --server.endpoint tcp://${SERVERS_EXTERNAL[$i]}:$PORT_COORDINATOR"
+    echo "   docker run -it --rm --net=host ${DOCKER_IMAGE_NAME} arangosh --server.endpoint tcp://${SERVERS_EXTERNAL[$i]}:$PORT_COORDINATOR"
 done
 
