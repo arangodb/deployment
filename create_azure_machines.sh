@@ -216,7 +216,7 @@ do
       SERVERS_IDS_AZURE[`expr $i - 1`]=$PREFIX$i
       FINISHED=1
     else
-      echo "Machine $PREFIX$i not ready yet."
+      echo "Machines not ready yet."
       sleep 5
       FINISHED=0
       break
@@ -231,6 +231,11 @@ do
 
   sleep 1
 
+done
+
+for i in `seq $NUMBER`; do
+  sleep 2
+  azure vm endpoint create "$PREFIX$i" 8529 8529
 done
 
 rm -rf $OUTPUT/temp
