@@ -1,6 +1,10 @@
 #!/bin/bash
 
-# This stops multiple coreos instances using google compute engine
+# This stops multiple coreos instances using digital ocean cloud platform
+#
+# Prerequisites:
+# The following environment variables are used:
+#   TOKEN  : digital ocean api-token (as environment variable)
 #
 # Optional prerequisites:
 #   OUTPUT : local output log folder (e.g. -d my-directory)
@@ -8,8 +12,7 @@
 #set -e
 set -u
 
-OUTPUT="gce"
-PROJECT=""
+OUTPUT="azure"
 
 while getopts ":d:" opt; do
   case $opt in
@@ -42,31 +45,34 @@ echo "NUMBER OF MACHINES: $NUMBER"
 echo "OUTPUT DIRECTORY: $OUTPUT"
 echo "MACHINE PREFIX: $PREFIX"
 
-if test -z "$TOKEN";  then
-  echo "$0: you must supply a token as environment variable with 'export TOKEN='your_token''"
-  exit 1
-fi
-
 wait
 
-export CLOUDSDK_CONFIG="$OUTPUT/gce"
-touch $OUTPUT/hosts
+export CLOUDSDK_CONFIG="$OUTPUT/azure"
 
-#google auth
-gcloud config set account arangodb
-gcloud config set project "$PROJECT"
-gcloud auth login
+function deleteService () {
+  echo "deleting service $PREFIX$1"
+  id=${SERVERS_IDS[`expr $1 - 1`]}
+
+  azure service delete "$id" -q
+}
 
 function deleteMachine () {
   echo "deleting machine $PREFIX$1"
   id=${SERVERS_IDS[`expr $1 - 1`]}
 
-  gcloud compute instances delete "$id" --zone "$ZONE" -q
+  azure vm delete "$id" -q
 }
 
 for i in `seq $NUMBER`; do
+  sleep 1
   deleteMachine $i &
 done
 
 wait
+
+#for i in `seq $NUMBER`; do
+#  deleteService $i &
+#done
+
+#wait
 
