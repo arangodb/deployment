@@ -63,12 +63,16 @@ function deleteMachine () {
   azure vm delete "$id" -q
 }
 
+echo "Destroying machines"
 for i in `seq $NUMBER`; do
   sleep 1
   deleteMachine $i &
 done
 
 wait
+
+echo "Destroying virtual network"
+azure network vnet delete "arangodb-test-vnet"
 
 #for i in `seq $NUMBER`; do
 #  deleteService $i &
