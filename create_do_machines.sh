@@ -18,8 +18,8 @@
 #set -e
 set -u
 
-REGION="sgp1"
-SIZE="512mb"
+REGION="ams3"
+SIZE="4gb"
 NUMBER="3"
 OUTPUT="digital_ocean"
 IMAGE="coreos-stable"
