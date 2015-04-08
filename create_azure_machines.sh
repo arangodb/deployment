@@ -149,9 +149,6 @@ function getMachine () {
 }
 
 function createMachine () {
-
-  echo using ssh key: "$DEFAULT_KEY_PATH.pem"
-
   echo "creating machine $PREFIX$1"
   azure vm create --vm-size "$MACHINE_TYPE" --userName "core" --ssh 22 --ssh-cert "${DEFAULT_KEY_PATH}.pem" \
   --location "$ZONE" --no-ssh-password "$PREFIX$1" "$IMAGE"
@@ -187,7 +184,6 @@ do
   for i in `seq $NUMBER`; do
 
     if [ -s "$OUTPUT/temp/INTERNAL$i" ] ; then
-      echo "Machine $PREFIX$i finished"
       SERVERS_INTERNAL_AZURE[`expr $i - 1`]=`cat "$OUTPUT/temp/INTERNAL$i"`
       SERVERS_EXTERNAL_AZURE[`expr $i - 1`]=`cat "$OUTPUT/temp/EXTERNAL$i"`
       SERVERS_IDS_AZURE[`expr $i - 1`]=$PREFIX$i
@@ -234,14 +230,9 @@ echo >>$OUTPUT/clusterinfo.sh "ZONE=\"$ZONE\""
 export SERVERS_INTERNAL
 export SERVERS_EXTERNAL
 export SERVERS_IDS
-export SSH_USER="arangodb"
+export SSH_USER="core"
 export SSH_CMD="ssh"
 export SSH_SUFFIX="-i $DEFAULT_KEY_PATH -l $SSH_USER"
 export ZONE
-
-echo TODO
-exit 1
-
-sleep 15
 
 ./startDockerCluster.sh
