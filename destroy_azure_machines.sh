@@ -64,6 +64,7 @@ function deleteMachine () {
 }
 
 for i in `seq $NUMBER`; do
+  sleep 1
   deleteMachine $i &
 done
 
