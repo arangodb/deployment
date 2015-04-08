@@ -209,9 +209,9 @@ testServer() {
     done
 }
 
-for i in `seq 0 $LASTDBSERVER` ; do
-    testServer ${SERVERS_EXTERNAL[$i]}:$PORT_DBSERVER
-done
+#for i in `seq 0 $LASTDBSERVER` ; do
+#    testServer ${SERVERS_EXTERNAL[$i]}:$PORT_DBSERVER
+#done
 
 for i in `seq 0 $LASTCOORDINATOR` ; do
     testServer ${SERVERS_EXTERNAL[$i]}:$PORT_COORDINATOR
