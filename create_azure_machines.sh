@@ -9,6 +9,8 @@
 #   OUTPUT  : local output log folder (e.g. -d /my/directory)
 #   SSH     : path to your already on azure deployed ssh key (e.g. -s /my/directory/mykey)
 
+trap "kill 0" SIGINT
+
 ZONE="West US"
 MACHINE_TYPE="Medium"
 NUMBER="3"
@@ -161,13 +163,13 @@ function getMachine () {
 function createMachine () {
   echo "creating machine $PREFIX$1"
   azure vm create --vm-size "$MACHINE_TYPE" --userName "core" --ssh 22 --ssh-cert "${DEFAULT_KEY_PATH}.pem" \
-  --location "$ZONE" --no-ssh-password "$PREFIX$1" "$IMAGE"
+  --no-ssh-password "$PREFIX$1" "$IMAGE"
 
   if [ $? -eq 0 ]; then
     echo
   else
-    echo Failed to create machine $PREFIX$1. Exiting.
-    exit 1
+    echo Failed to create machine $PREFIX$1. Retrying.
+      createMachine $i &
   fi
 }
 
@@ -181,15 +183,21 @@ SSH_CMD="gcloud compute ssh"
 SSH_PARAM="/bin/true"
 
 for i in `seq $NUMBER`; do
+  echo "Creating services for virtual machines."
+  # not parallel because azure cannot spawn multiple services at the same time
+  azure service create "$PREFIX$i" --location "$ZONE"
+done
+
+for i in `seq $NUMBER`; do
+  sleep 2
   createMachine $i &
-  # sleep because azure cant spawn multiple services at the same time
-  sleep 1
 done
 
 wait
 
 # get machines information
 for i in `seq $NUMBER`; do
+  sleep 2
   getMachine $i &
 done
 
