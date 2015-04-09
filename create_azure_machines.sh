@@ -81,10 +81,6 @@ mkdir -p "$OUTPUT/temp"
 
 export CLOUDSDK_CONFIG="$OUTPUT/azure"
 
-#gcloud config set account arangodb
-#gcloud config set project "$PROJECT"
-#gcloud auth login
-
 if test -z "$SSH_KEY_PATH";
 then
 
@@ -183,10 +179,6 @@ function createEndpoint () {
 declare -a SERVERS_EXTERNAL_AZURE
 declare -a SERVERS_INTERNAL_AZURE
 declare -a SERVERS_IDS_AZURE
-
-SSH_USER="arangodb"
-SSH_CMD="gcloud compute ssh"
-SSH_PARAM="/bin/true"
 
 echo "Creating virtual network"
 azure network vnet create "arangodb-test-vnet" --location "$ZONE"
