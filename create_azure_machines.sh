@@ -81,10 +81,6 @@ mkdir -p "$OUTPUT/temp"
 
 export CLOUDSDK_CONFIG="$OUTPUT/azure"
 
-#gcloud config set account arangodb
-#gcloud config set project "$PROJECT"
-#gcloud auth login
-
 if test -z "$SSH_KEY_PATH";
 then
 
@@ -147,7 +143,6 @@ function getMachine () {
   while [ "$state" != "ReadyRole" ]; do
 
     instance=`azure vm show "$PREFIX$1"`
-echo $instance
     state=`echo "$instance" | grep InstanceStatus | awk '{print $3}' | cut -c 2- | rev | cut -c 2- | rev`
   done
 

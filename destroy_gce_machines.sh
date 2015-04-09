@@ -49,20 +49,14 @@ fi
 
 wait
 
-export CLOUDSDK_CONFIG="$OUTPUT/gce"
-touch $OUTPUT/hosts
-
-#google auth
-gcloud config set account arangodb
-gcloud config set project "$PROJECT"
-gcloud auth login
-
 function deleteMachine () {
   echo "deleting machine $PREFIX$1"
   id=${SERVERS_IDS[`expr $1 - 1`]}
 
   gcloud compute instances delete "$id" --zone "$ZONE" -q
 }
+
+gcloud compute firewall-rules delete "arangodb-test"
 
 for i in `seq $NUMBER`; do
   deleteMachine $i &
