@@ -11,7 +11,6 @@
 #   SIZE    : size/machine-type of the instance (e.g. -m n1-standard-2)
 #   NUMBER  : count of machines to create (e.g. -n 3)
 #   OUTPUT  : local output log folder (e.g. -d /my/directory)
-#   SSH     : path to your already on gce deployed ssh key (e.g. -s /my/directory/mykey)
 
 ZONE="europe-west1-b"
 MACHINE_TYPE="n1-standard-2"
@@ -19,9 +18,7 @@ NUMBER="3"
 OUTPUT="gce"
 PROJECT=""
 SSH_KEY_PATH=""
-DEFAULT_KEY_PATH="$OUTPUT/arangodb_gce_key"
-
-DEPLOY_KEY=0
+DEFAULT_KEY_PATH="$HOME/.ssh/google_compute_engine"
 
 while getopts ":z:m:n:d:p:s:" opt; do
   case $opt in
@@ -64,8 +61,37 @@ echo "PROJECT: $PROJECT"
 echo "MACHINE PREFIX: $PREFIX"
 
 if test -z "$PROJECT";  then
-  echo "$0: you must supply a project with '-p'"
-  exit 1
+
+  #check if project is already set
+  project=`gcloud config list | grep project`
+
+  if test -z "$project";  then
+    echo "$0: you must supply a project with '-p' or set it with gcloud config set project 'project-id'"
+    exit 1
+  else
+    echo "gcloud project already set."
+  fi
+
+else
+  echo "Setting gcloud project attribute"
+  gcloud config set project "$PROJECT"
+fi
+
+if test -z "$ZONE";  then
+
+  #check if project is already set
+  zone=`gcloud config list | grep zone`
+
+  if test -z "$zone";  then
+    echo "$0: you must supply a zone with '-z' or set it with gcloud config set zone 'your-zone'"
+    exit 1
+  else
+    echo "gcloud zone already set."
+  fi
+
+else
+  echo "Setting gcloud zone attribute"
+  gcloud config set compute/zone "$ZONE"
 fi
 
 if test -e "$OUTPUT";  then
@@ -75,54 +101,14 @@ fi
 
 mkdir -p "$OUTPUT/temp"
 
-export CLOUDSDK_CONFIG="$OUTPUT/gce"
+#export CLOUDSDK_CONFIG="$OUTPUT/gce"
 
-gcloud config set account arangodb
-gcloud config set project "$PROJECT"
-gcloud auth login
-
-if test -z "$SSH_KEY_PATH";
-then
-
-  if [[ -s "$HOME/.ssh/arangodb_gce_key" ]] ; then
-    echo "ArangoDB GCE SSH-Key existing."
-    DEFAULT_KEY_PATH="$HOME/.ssh/arangodb_gce_key"
-  else
-    echo "No SSH-Key-Path given. Creating a new SSH-Key."
-    ssh-keygen -t dsa -f "$DEFAULT_KEY_PATH" -C "arangodb@arangodb.com"
-
-    if [ $? -eq 0 ]; then
-      echo Created SSH-Key.
-    else
-      echo Failed to create SSH-Key. Exiting.
-      exit 1
-    fi
-    DEPLOY_KEY=1
-    cp $DEFAULT_KEY_PATH* $HOME/.ssh/
-    DEFAULT_KEY_PATH="$HOME/.ssh/arangodb_gce_key"
-  fi ;
-
+if [[ -s "$HOME/.ssh/google_compute_engine" ]] ; then
+  echo "GCE SSH-Key existing."
 else
-  #Check if SSH-Files are available and valid
-  echo "Trying to use $SSH_KEY_PATH."
-  DEFAULT_KEY_PATH="$SSH_KEY_PATH"
-  ssh-keygen -l -f "$DEFAULT_KEY_PATH"
-
-  read -p "Deploy your SSH-Key? Only needed if not already deployed: y/n " -n 1 -r
-    echo
-  if [[ $REPLY =~ ^[Yy]$ ]]
-  then
-    DEPLOY_KEY=1
-  fi
-
-  if [ $? -eq 0 ]; then
-    echo SSH-Key is valid.
-  else
-    echo Failed to validate SSH-Key. Exiting.
-    exit 1
-  fi
-fi
-
+  echo "No GCE SSH-Key existing. Creating a new SSH-Key."
+  gcloud compute config-ssh
+fi ;
 
 #check if ssh agent is running
 if [ -n "${SSH_AUTH_SOCK}" ]; then
@@ -137,7 +123,6 @@ if [ -n "${SSH_AUTH_SOCK}" ]; then
 
   else
     echo "No SSH-Agent running. Skipping."
-
 fi
 
 function createMachine () {
@@ -156,9 +141,8 @@ declare -a SERVERS_EXTERNAL_GCE
 declare -a SERVERS_INTERNAL_GCE
 declare -a SERVERS_IDS_GCE
 
-SSH_USER="arangodb"
-SSH_CMD="gcloud compute ssh"
-SSH_PARAM="/bin/true"
+SSH_USER="core"
+SSH_CMD="ssh"
 
 for i in `seq $NUMBER`; do
   createMachine $i &
@@ -222,22 +206,12 @@ echo >>$OUTPUT/clusterinfo.sh "PROJECT=\"$PROJECT\""
 export SERVERS_INTERNAL
 export SERVERS_EXTERNAL
 export SERVERS_IDS
-export SSH_USER="arangodb"
+export SSH_USER="core"
 export SSH_CMD="ssh"
 export SSH_SUFFIX="-i $DEFAULT_KEY_PATH -l $SSH_USER"
 export ZONE
 export PROJECT
 
-# Have to wait until google deployed keys on all instances.
-echo "Now waiting for Google SSH-Key distribution."
-sleep 45
-
-if [ $DEPLOY_KEY == 1 ]; then
-  gcloud compute ssh --ssh-key-file "$DEFAULT_KEY_PATH" --project "$PROJECT" --zone "$ZONE" --command "/bin/true" "arangodb@${PREFIX}1"
-else
-  echo "No need for key deployment."
-fi
-
-sleep 15
+sleep 5
 
 ./startDockerCluster.sh
