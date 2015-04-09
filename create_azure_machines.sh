@@ -143,7 +143,6 @@ function getMachine () {
   while [ "$state" != "ReadyRole" ]; do
 
     instance=`azure vm show "$PREFIX$1"`
-echo $instance
     state=`echo "$instance" | grep InstanceStatus | awk '{print $3}' | cut -c 2- | rev | cut -c 2- | rev`
   done
 
