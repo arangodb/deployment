@@ -162,12 +162,11 @@ function createMachine () {
   azure vm create --vm-size "$MACHINE_TYPE" --userName "core" --ssh 22 --ssh-cert "${DEFAULT_KEY_PATH}.pem" \
   --virtual-network-name "arangodb-test-vnet" --no-ssh-password "$PREFIX$1" "$IMAGE"
 
-  if [ $? -eq 0 ]; then
-    echo
-  else
-    echo Failed to create machine $PREFIX$1. Retrying.
-      createMachine $i &
-  fi
+#  if [ $? -eq 0 ]; then
+#    echo
+#  else
+#    echo Failed to create machine $PREFIX$1. Retrying.
+#  fi
 }
 
 function createEndpoint () {
