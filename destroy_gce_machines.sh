@@ -56,6 +56,8 @@ function deleteMachine () {
   gcloud compute instances delete "$id" --zone "$ZONE" -q
 }
 
+gcloud compute firewall-rules delete "arangodb-test"
+
 for i in `seq $NUMBER`; do
   deleteMachine $i &
 done
