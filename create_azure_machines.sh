@@ -262,6 +262,15 @@ SERVERS_INTERNAL="${SERVERS_INTERNAL_AZURE[@]}"
 SERVERS_EXTERNAL="${SERVERS_EXTERNAL_AZURE[@]}"
 SERVERS_IDS="${SERVERS_IDS_AZURE[@]}"
 
+# Export needed variables
+export SERVERS_INTERNAL
+export SERVERS_EXTERNAL
+export SERVERS_IDS
+export SSH_USER="core"
+export SSH_CMD="ssh"
+export SSH_SUFFIX="-i $DEFAULT_KEY_PATH"
+export ZONE
+
 # Write data to file:
 echo > $OUTPUT/clusterinfo.sh "SERVERS_INTERNAL=\"$SERVERS_INTERNAL\""
 echo >>$OUTPUT/clusterinfo.sh "SERVERS_EXTERNAL=\"$SERVERS_EXTERNAL\""
@@ -271,14 +280,5 @@ echo >>$OUTPUT/clusterinfo.sh "SSH_CMD=\"$SSH_CMD\""
 echo >>$OUTPUT/clusterinfo.sh "SSH_SUFFIX=\"$SSH_SUFFIX\""
 echo >>$OUTPUT/clusterinfo.sh "PREFIX=\"$PREFIX\""
 echo >>$OUTPUT/clusterinfo.sh "ZONE=\"$ZONE\""
-
-# Export needed variables
-export SERVERS_INTERNAL
-export SERVERS_EXTERNAL
-export SERVERS_IDS
-export SSH_USER="core"
-export SSH_CMD="ssh"
-export SSH_SUFFIX="-i $DEFAULT_KEY_PATH -l $SSH_USER"
-export ZONE
 
 ./startDockerCluster.sh
