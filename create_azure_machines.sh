@@ -163,30 +163,35 @@ echo $instance
 }
 
 function createMachine () {
-  echo "creating machine $PREFIX$1"
-  azure vm create --vm-size "$MACHINE_TYPE" --userName "core" --ssh 22 --ssh-cert "${DEFAULT_KEY_PATH}.pem" \
-  --virtual-network-name "arangodb-test-vnet" --no-ssh-password "$PREFIX$1" "$IMAGE"
-
-  if [ $? -eq 0 ]; then
-    echo
-  else
-    echo Failed to create machine $PREFIX$1. Retrying.
-      createMachine $i &
-  fi
+  ok=0
+  while [ "$ok" == "0" ] ; do
+    echo "creating machine $PREFIX$1"
+    azure vm create --vm-size "$MACHINE_TYPE" --userName "core" --ssh 22 --ssh-cert "${DEFAULT_KEY_PATH}.pem" \
+      --virtual-network-name "arangodb-test-vnet" --no-ssh-password "$PREFIX$1" "$IMAGE" >>/tmp/azure$1.log
+    if [ $? -eq 0 ]; then
+      ok=1
+    else
+      echo Failed to create machine $PREFIX$1. Retrying.
+    fi
+  done
 }
 
 function createEndpoint () {
-  azure vm endpoint create "$PREFIX$1" 8529 8529
+  ok=0
+  while [ "$ok" == "0" ] ; do
+    echo "opening port 8529 for $PREFIX$1"
+    azure vm endpoint create "$PREFIX$1" 8529 8529 >>/tmp/azure$1.log
+    if [ $? -eq 0 ]; then
+      ok=1
+    else
+      echo Failed to open port 8529 $PREFIX$1. Retrying.
+    fi
+  done
 }
 
-#CoreOS PARAMS
 declare -a SERVERS_EXTERNAL_AZURE
 declare -a SERVERS_INTERNAL_AZURE
 declare -a SERVERS_IDS_AZURE
-
-SSH_USER="arangodb"
-SSH_CMD="gcloud compute ssh"
-SSH_PARAM="/bin/true"
 
 echo "Creating virtual network"
 azure network vnet create "arangodb-test-vnet" --location "$ZONE"

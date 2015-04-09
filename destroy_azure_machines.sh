@@ -49,18 +49,19 @@ wait
 
 export CLOUDSDK_CONFIG="$OUTPUT/azure"
 
-function deleteService () {
-  echo "deleting service $PREFIX$1"
-  id=${SERVERS_IDS[`expr $1 - 1`]}
-
-  azure service delete "$id" -q
-}
-
 function deleteMachine () {
   echo "deleting machine $PREFIX$1"
   id=${SERVERS_IDS[`expr $1 - 1`]}
 
-  azure vm delete "$id" -q
+  ok=0
+  while [ "$ok" == "0" ]; do
+    azure vm delete "$id" -q
+    if [ $? -eq 0 ] ; then
+      ok=1
+    else
+      echo Failed to delete service $PREFIX$1. Retrying.
+    fi
+  done
 }
 
 echo "Destroying machines"
@@ -73,10 +74,6 @@ wait
 
 echo "Destroying virtual network"
 azure network vnet delete "arangodb-test-vnet"
-
-#for i in `seq $NUMBER`; do
-#  deleteService $i &
-#done
 
 #wait
 
