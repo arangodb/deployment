@@ -125,9 +125,13 @@ if [ -n "${SSH_AUTH_SOCK}" ]; then
     echo "No SSH-Agent running. Skipping."
 fi
 
+#add firewall rule for arangodb-test tag
+gcloud compute firewall-rules create "arangodb-test" --allow tcp:8529 --target-tags "arangodb-test"
+
 function createMachine () {
   echo "creating machine $PREFIX$1"
-  INSTANCE=`gcloud compute instances create --image coreos --zone "$ZONE" --machine-type "$MACHINE_TYPE" "$PREFIX$1" | grep "^$PREFIX"`
+  INSTANCE=`gcloud compute instances create --image coreos --zone "$ZONE" \
+            --tags "arangodb-test" --machine-type "$MACHINE_TYPE" "$PREFIX$1" | grep "^$PREFIX"`
 
   a=`echo $INSTANCE | awk '{print $4}'`
   b=`echo $INSTANCE | awk '{print $5}'`
