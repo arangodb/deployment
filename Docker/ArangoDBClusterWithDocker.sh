@@ -40,7 +40,7 @@ startArangoDBClusterWithDocker() {
     #  microbox/etcd for the agency and
     #  ${DOCKER_IMAGE_NAME} for
     #   - arangod
-    #   - arnagosh
+    #   - arangosh
     #   - some helper scripts
 
     # To stop the cluster simply stop and remove the containers with the
