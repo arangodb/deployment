@@ -77,9 +77,9 @@ declare -a SERVERS_INTERNAL_DO
 declare -a SERVERS_IDS_DO
 
 SSH_USER="core"
-SSH_KEY="arangodb_key"
+SSH_KEY="arangodb_do_key"
 SSH_CMD="ssh"
-SSH_SUFFIX="-i $HOME/.ssh/arangodb_key -l $SSH_USER"
+SSH_SUFFIX="-i $HOME/.ssh/arangodb_do_key -l $SSH_USER"
 
 REMOVE=0
 
@@ -176,7 +176,7 @@ if test -z "$SSHID";  then
   BOOL=0
   COUNTER=0
 
-  if [ ! -f $HOME/.ssh/arangodb_key.pub ];
+  if [ ! -f $HOME/.ssh/arangodb_do_key.pub ];
 
   then
     echo "No ArangoDB SSH-Key found. Generating a new one.!"
@@ -191,7 +191,7 @@ if test -z "$SSHID";  then
 
     cp $OUTPUT/$SSH_KEY* $HOME/.ssh/
 
-    SSHPUB=`cat $HOME/.ssh/arangodb_key.pub`
+    SSHPUB=`cat $HOME/.ssh/arangodb_do_key.pub`
 
     echo Deploying ssh keypair on digital ocean.
     CURL=`curl -s -S -D $OUTPUT/temp/header -X POST -H 'Content-Type: application/json' \
@@ -210,8 +210,8 @@ if test -z "$SSHID";  then
 
   else
 
-    echo "ArangoDB SSH-Key found. Try to use $HOME/.ssh/arangodb_key.pub"
-    LOCAL_KEY=`cat $HOME/.ssh/arangodb_key.pub | awk '{print $2}'`
+    echo "ArangoDB SSH-Key found. Try to use $HOME/.ssh/arangodb_do_key.pub"
+    LOCAL_KEY=`cat $HOME/.ssh/arangodb_do_key.pub | awk '{print $2}'`
     DOKEYS=`curl -D $OUTPUT/temp/header -s -S -X GET -H 'Content-Type: application/json' \
            -H "Authorization: Bearer $TOKEN" "https://api.digitalocean.com/v2/account/keys"`
 
@@ -249,7 +249,7 @@ if test -z "$SSHID";  then
     else
       echo "Your stored SSH-Key is not deployed."
 
-        SSHPUB=`cat $HOME/.ssh/arangodb_key.pub`
+        SSHPUB=`cat $HOME/.ssh/arangodb_do_key.pub`
         echo Deploying ssh keypair on digital ocean.
           CURL=`curl -s -S -D $OUTPUT/temp/header --request POST -H 'Content-Type: application/json' \
             -H "Authorization: Bearer $TOKEN" \
@@ -276,10 +276,10 @@ if [ -n "${SSH_AUTH_SOCK}" ]; then
     echo "SSH-Agent is running."
 
     #check if key already added to ssh agent
-    if ssh-add -l | grep arangodb_key > /dev/null ; then
+    if ssh-add -l | grep arangodb_do_key > /dev/null ; then
       echo SSH-Key already added to SSH-Agent;
     else
-      ssh-add $HOME/.ssh/arangodb_key
+      ssh-add $HOME/.ssh/arangodb_do_key
     fi
 
   else
@@ -450,7 +450,7 @@ export SERVERS_EXTERNAL
 export SERVERS_IDS
 export SSH_USER="core"
 export SSH_CMD="ssh"
-export SSH_SUFFIX="-i $HOME/.ssh/arangodb_key -l $SSH_USER"
+export SSH_SUFFIX="-i $HOME/.ssh/arangodb_do_key -l $SSH_USER"
 
 # Wait for DO instances
 
