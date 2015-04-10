@@ -11,3 +11,6 @@ GoogleComputeEngine_ArangoDB_Cluster.sh: Makefile platformGCE/GoogleComputeEngin
 	cat Docker/ArangoDBClusterWithDocker.sh >> $@
 	cat platformGCE/GoogleComputeEngine_ArangoDB_Cluster.sh >> $@
 	chmod 755 $@
+
+clean:
+	rm -f DigitalOcean_ArangoDB_Cluster.sh GoogleComputeEngine_ArangoDB_Cluster.sh
