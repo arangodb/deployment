@@ -68,6 +68,15 @@ DigitalOceanDestroyMachines() {
 
     wait
 
+    read -p "Delete directory: '$OUTPUT' ? [y/n]: " -n 1 -r
+      echo
+    if [[ $REPLY =~ ^[Yy]$ ]]
+      then
+        rm -r "$OUTPUT"
+      else
+        echo "For a new cluster instance, please remove the directory or specifiy another output directory with -d '/my/directory'"
+    fi
+
     exit 0
 }
 
