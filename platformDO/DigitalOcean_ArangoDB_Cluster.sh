@@ -18,6 +18,8 @@
 #   PREFIX : prefix for your machine names (e.g. "export PREFIX="arangodb-test-$$-")
 
 #set -e
+
+trap "kill 0" SIGINT
 set -u
 
 REGION="ams3"

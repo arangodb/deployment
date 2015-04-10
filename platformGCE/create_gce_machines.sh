@@ -12,6 +12,8 @@
 #   NUMBER  : count of machines to create (e.g. -n 3)
 #   OUTPUT  : local output log folder (e.g. -d /my/directory)
 
+trap "kill 0" SIGINT
+
 ZONE="europe-west1-b"
 MACHINE_TYPE="n1-standard-2"
 NUMBER="3"
