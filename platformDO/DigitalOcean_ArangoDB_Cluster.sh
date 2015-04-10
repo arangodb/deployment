@@ -29,7 +29,7 @@ SSHID=""
 
 function deleteMachine () {
   echo "deleting machine $PREFIX$1"
-  id=${SERVERS_IDS[`expr $1 - 1`]}
+  id=${SERVERS_IDS_ARR[`expr $1 - 1`]}
 
   CURL=`curl --request DELETE "https://api.digitalocean.com/v2/droplets/$id" \
        --header "Content-Type: application/json" \
@@ -44,9 +44,9 @@ DigitalOceanDestroyMachines() {
 
     . $OUTPUT/clusterinfo.sh
 
-    declare -a SERVERS_IDS=(${SERVERS_IDS[@]})
+    declare -a SERVERS_IDS_ARR=(${SERVERS_IDS[@]})
 
-    NUMBER=${#SERVERS_IDS[@]}
+    NUMBER=${#SERVERS_IDS_ARR[@]}
 
     echo "NUMBER OF MACHINES: $NUMBER"
     echo "OUTPUT DIRECTORY: $OUTPUT"
@@ -83,7 +83,7 @@ SSH_SUFFIX="-i $HOME/.ssh/arangodb_do_key -l $SSH_USER"
 
 REMOVE=0
 
-while getopts ":z:m:n:d:s:h" opt; do
+while getopts ":z:m:n:d:s:hr" opt; do
   case $opt in
     h)
       cat <<EOT
