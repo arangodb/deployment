@@ -1,6 +1,7 @@
-#!/bin/bash
-
-# This starts multiple coreos instances using google compute engine
+# This starts multiple coreos instances using google compute engine and then
+# starts an ArangoDB cluster on them.
+#
+# Use -r to permanently remove an existing cluster and all machine instances.
 #
 # Prerequisites:
 # The following environment variables are used:
@@ -22,8 +23,63 @@ PROJECT=""
 SSH_KEY_PATH=""
 DEFAULT_KEY_PATH="$HOME/.ssh/google_compute_engine"
 
-while getopts ":z:m:n:d:p:s:" opt; do
+function deleteMachine () {
+  echo "deleting machine $PREFIX$1"
+  id=${SERVERS_IDS[`expr $1 - 1`]}
+
+  gcloud compute instances delete "$id" --zone "$ZONE" -q
+}
+
+GoogleComputeEngineDestroyMachines() {
+
+    if [ ! -e "$OUTPUT" ] ;  then
+      echo "$0: directory '$OUTPUT' not found"
+      exit 1
+    fi
+
+    . $OUTPUT/clusterinfo.sh
+
+    declare -a SERVERS_IDS_ARR=(${SERVERS_IDS[@]})
+
+    NUMBER=${#SERVERS_IDS_ARR[@]}
+
+    echo "NUMBER OF MACHINES: $NUMBER"
+    echo "OUTPUT DIRECTORY: $OUTPUT"
+    echo "MACHINE PREFIX: $PREFIX"
+
+
+    gcloud compute firewall-rules delete "arangodb-test"
+
+    for i in `seq $NUMBER`; do
+      deleteMachine $i &
+    done
+
+    wait
+    
+    exit 0
+}
+
+REMOVE=0
+
+while getopts ":z:m:n:d:p:s:hr" opt; do
   case $opt in
+    h)
+       cat <<EOT
+This starts multiple coreos instances using google compute engine and then
+starts an ArangoDB cluster on them.
+
+Use -r to permanently remove an existing cluster and all machine instances.
+
+Prerequisites:
+The following environment variables are used:
+  PROJECT : project id of your designated project (e.g. -p "project_id");
+
+Optional prerequisites:
+  ZONE  : size of the server (e.g. -z europe-west1-b)
+  SIZE    : size/machine-type of the instance (e.g. -m n1-standard-2)
+  NUMBER  : count of machines to create (e.g. -n 3)
+  OUTPUT  : local output log folder (e.g. -d /my/directory)
+EOT
     z)
       ZONE="$OPTARG"
       ;;
@@ -42,6 +98,9 @@ while getopts ":z:m:n:d:p:s:" opt; do
     s)
       SSH_KEY_PATH="$OPTARG"
       ;;
+    r)
+      REMOVE=1
+      ;;
     \?)
       echo "Invalid option: -$OPTARG" >&2
       exit 1
@@ -55,12 +114,9 @@ done
 
 PREFIX="arangodb-test-$$-"
 
-echo "ZONE: $ZONE"
-echo "MACHINE_TYPE: $MACHINE_TYPE"
-echo "NUMBER OF MACHINES: $NUMBER"
 echo "OUTPUT DIRECTORY: $OUTPUT"
+echo "ZONE: $ZONE"
 echo "PROJECT: $PROJECT"
-echo "MACHINE PREFIX: $PREFIX"
 
 if test -z "$PROJECT";  then
 
@@ -97,9 +153,23 @@ else
 fi
 
 if test -e "$OUTPUT";  then
+  if [ "$REMOVE" == "1" ] ; then
+    GoogleComputeEngineDestroyMachines
+    exit 0
+  fi
+
   echo "$0: refusing to use existing directory '$OUTPUT'"
   exit 1
 fi
+
+if [ "$REMOVE" == "1" ] ; then
+  echo "$0: did not find an existing directory '$OUTPUT'"
+  exit 1
+fi
+
+echo "MACHINE_TYPE: $MACHINE_TYPE"
+echo "NUMBER OF MACHINES: $NUMBER"
+echo "MACHINE PREFIX: $PREFIX"
 
 mkdir -p "$OUTPUT/temp"
 
@@ -220,4 +290,4 @@ export PROJECT
 
 sleep 5
 
-./startDockerCluster.sh
+startArangoDBClusterWithDocker
