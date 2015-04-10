@@ -1,5 +1,7 @@
-# This starts multiple coreos instances using digital ocean cloud platform
+# This starts multiple coreos instances using the digital ocean cloud platform
 # and then starts an ArangoDB cluster on them.
+#
+# Use -r to permanently remove an existing cluster and all machine instances.
 #
 # Prerequisites:
 # The following environment variables are used:
@@ -25,6 +27,50 @@ OUTPUT="digital_ocean"
 IMAGE="coreos-stable"
 SSHID=""
 
+function deleteMachine () {
+  echo "deleting machine $PREFIX$1"
+  id=${SERVERS_IDS[`expr $1 - 1`]}
+
+  CURL=`curl --request DELETE "https://api.digitalocean.com/v2/droplets/$id" \
+       --header "Content-Type: application/json" \
+       --header "Authorization: Bearer $TOKEN" 2>/dev/null`
+}
+
+DigitalOceanDestroyMachines() {
+    if [ ! -e "$OUTPUT" ] ;  then
+      echo "$0: directory '$OUTPUT' not found"
+      exit 1
+    fi
+
+    . $OUTPUT/clusterinfo.sh
+
+    declare -a SERVERS_IDS=(${SERVERS_IDS[@]})
+
+    NUMBER=${#SERVERS_IDS[@]}
+
+    echo "NUMBER OF MACHINES: $NUMBER"
+    echo "OUTPUT DIRECTORY: $OUTPUT"
+    echo "MACHINE PREFIX: $PREFIX"
+
+    if test -z "$TOKEN";  then
+      echo "$0: you must supply a token as environment variable with 'export TOKEN='your_token''"
+      exit 1
+    fi
+
+    export CLOUDSDK_CONFIG="$OUTPUT/digital_ocean"
+    touch $OUTPUT/hosts
+    touch $OUTPUT/curl.log
+    CURL=""
+
+    for i in `seq $NUMBER`; do
+      deleteMachine $i &
+    done
+
+    wait
+
+    exit 0
+}
+
 #COREOS PARAMS
 declare -a SERVERS_EXTERNAL_DO
 declare -a SERVERS_INTERNAL_DO
@@ -35,11 +81,15 @@ SSH_KEY="arangodb_key"
 SSH_CMD="ssh"
 SSH_SUFFIX="-i $HOME/.ssh/arangodb_key -l $SSH_USER"
 
+REMOVE=0
+
 while getopts ":z:m:n:d:s:h" opt; do
   case $opt in
     h)
       cat <<EOT
-This starts multiple coreos instances using digital ocean cloud platform
+This starts multiple coreos instances using the digital ocean cloud platform
+
+Use -r to permanently remove an existing cluster and all machine instances.
 
 Prerequisites:
 The following environment variables are used:
@@ -69,6 +119,9 @@ EOT
     d)
       OUTPUT="$OPTARG"
       ;;
+    r)
+      REMOVE=1
+      ;;
     s)
       SSHID="$OPTARG"
       ;;
@@ -85,18 +138,28 @@ done
 
 PREFIX="arangodb-test-$$-"
 
+: ${TOKEN?"You must supply a token as environment variable with 'export TOKEN='your_token'"}
+
+if test -e "$OUTPUT";  then
+  if [ "$REMOVE" == "1" ] ; then
+    DigitalOceanDestroyMachines
+    exit 0
+  fi
+
+  echo "$0: refusing to use existing directory '$OUTPUT'"
+  exit 1
+fi
+
+if [ "$REMOVE" == "1" ] ; then
+  echo "$0: did not find an existing directory '$OUTPUT'"
+  exit 1
+fi
+
 echo "REGION: $REGION"
 echo "SIZE: $SIZE"
 echo "NUMBER OF MACHINES: $NUMBER"
 echo "OUTPUT DIRECTORY: $OUTPUT"
 echo "MACHINE PREFIX: $PREFIX"
-
-: ${TOKEN?"You must supply a token as environment variable with 'export TOKEN='your_token'"}
-
-if test -e "$OUTPUT";  then
-  echo "$0: refusing to use existing directory '$OUTPUT'"
-  exit 1
-fi
 
 wget -q --tries=10 --timeout=20 --spider http://google.com
 if [[ $? -eq 0 ]]; then
