@@ -30,7 +30,7 @@
 
 # All servers must be accessible without typing passwords (tell your agent!)
 # via ssh using the following command for server number i:
-#   ${SSH_CMD} "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL[i]} ${SSH_SUFFIX} docker run ...
+#   ${SSH_CMD} "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[i]} ${SSH_SUFFIX} docker run ...
 
 startArangoDBClusterWithDocker() {
 
@@ -57,17 +57,17 @@ startArangoDBClusterWithDocker() {
       echo Need SERVERS_EXTERNAL environment variable
       exit 1
     fi
-    declare -a SERVERS_EXTERNAL=($SERVERS_EXTERNAL)
-    echo SERVERS_EXTERNAL: ${SERVERS_EXTERNAL[*]}
+    declare -a SERVERS_EXTERNAL_ARR=($SERVERS_EXTERNAL)
+    echo SERVERS_EXTERNAL: ${SERVERS_EXTERNAL_ARR[*]}
 
     if [ -z "$SERVERS_INTERNAL" ] ; then
-      declare -a SERVERS_INTERNAL=(${SERVERS_EXTERNAL[*]})
+      declare -a SERVERS_INTERNAL_ARR=(${SERVERS_EXTERNAL_ARR[*]})
     else
-      declare -a SERVERS_INTERNAL=($SERVERS_INTERNAL)
+      declare -a SERVERS_INTERNAL_ARR=($SERVERS_INTERNAL)
     fi
-    echo SERVERS_INTERNAL: ${SERVERS_INTERNAL[*]}
+    echo SERVERS_INTERNAL: ${SERVERS_INTERNAL_ARR[*]}
 
-    NRDBSERVERS=${#SERVERS_EXTERNAL[*]}
+    NRDBSERVERS=${#SERVERS_EXTERNAL_ARR[*]}
     LASTDBSERVER=`expr $NRDBSERVERS - 1`
 
     echo Number of DBServers: $NRDBSERVERS
@@ -128,56 +128,56 @@ startArangoDBClusterWithDocker() {
     echo COORDINATOR_LOGS=$COORDINATOR_LOGS
 
     echo Creating directories on servers
-    $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL[0]} $SSH_SUFFIX mkdir $AGENCY_DIR >/dev/null 2>&1 &
+    $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[0]} $SSH_SUFFIX mkdir $AGENCY_DIR >/dev/null 2>&1 &
     for i in `seq 0 $LASTDBSERVER` ; do
-      $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL[$i]} $SSH_SUFFIX mkdir $DBSERVER_DATA $DBSERVER_LOGS >/dev/null 2>&1 &
+      $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[$i]} $SSH_SUFFIX mkdir $DBSERVER_DATA $DBSERVER_LOGS >/dev/null 2>&1 &
     done
     for i in `seq 0 $LASTCOORDINATOR` ; do
-      $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL[$i]} $SSH_SUFFIX mkdir $COORDINATOR_DATA $COORDINATOR_LOGS >/dev/null 2>&1 &
+      $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[$i]} $SSH_SUFFIX mkdir $COORDINATOR_DATA $COORDINATOR_LOGS >/dev/null 2>&1 &
     done
 
     wait
 
     echo Starting agency...
-    $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL[0]} $SSH_SUFFIX "docker run --detach=true -p 4001:4001 --name=agency -v $AGENCY_DIR:/data microbox/etcd:latest etcd -name agency >/home/$SSH_USER/agency.log"
+    $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[0]} $SSH_SUFFIX "docker run --detach=true -p 4001:4001 --name=agency -v $AGENCY_DIR:/data microbox/etcd:latest etcd -name agency >/home/$SSH_USER/agency.log"
 
     sleep 1
     echo Initializing agency...
-    $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL[0]} $SSH_SUFFIX "docker run --link=agency:agency --rm ${DOCKER_IMAGE_NAME} arangosh --javascript.execute /scripts/init_agency.js > /home/$SSH_USER/init_agency.log"
+    $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[0]} $SSH_SUFFIX "docker run --link=agency:agency --rm ${DOCKER_IMAGE_NAME} arangosh --javascript.execute /scripts/init_agency.js > /home/$SSH_USER/init_agency.log"
     echo Starting discovery...
-    $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL[0]} $SSH_SUFFIX "docker run --detach=true --link=agency:agency --name discovery ${DOCKER_IMAGE_NAME} arangosh --javascript.execute scripts/discover.js > /home/$SSH_USER/discovery.log"
+    $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[0]} $SSH_SUFFIX "docker run --detach=true --link=agency:agency --name discovery ${DOCKER_IMAGE_NAME} arangosh --javascript.execute scripts/discover.js > /home/$SSH_USER/discovery.log"
 
     start_dbserver () {
         i=$1
-        echo Starting DBserver on ${SERVERS_EXTERNAL[$i]}:$PORT_DBSERVER
+        echo Starting DBserver on ${SERVERS_EXTERNAL_ARR[$i]}:$PORT_DBSERVER
 
-        $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL[$i]} $SSH_SUFFIX \
+        $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[$i]} $SSH_SUFFIX \
         docker run --detach=true -v $DBSERVER_DATA:/data \
          -v $DBSERVER_LOGS:/logs --net=host \
          --name=dbserver$PORT_DBSERVER ${DOCKER_IMAGE_NAME} \
           arangod --database.directory /data \
-          --cluster.agency-endpoint tcp://${SERVERS_INTERNAL[0]}:4001 \
-          --cluster.my-address tcp://${SERVERS_INTERNAL[$i]}:$PORT_DBSERVER \
+          --cluster.agency-endpoint tcp://${SERVERS_INTERNAL_ARR[0]}:4001 \
+          --cluster.my-address tcp://${SERVERS_INTERNAL_ARR[$i]}:$PORT_DBSERVER \
           --server.endpoint tcp://0.0.0.0:$PORT_DBSERVER \
-          --cluster.my-local-info dbserver:${SERVERS_INTERNAL[$i]}:$PORT_DBSERVER \
+          --cluster.my-local-info dbserver:${SERVERS_INTERNAL_ARR[$i]}:$PORT_DBSERVER \
           --log.file /logs/$PORT_DBSERVER.log >/dev/null
     }
 
     start_coordinator () {
         i=$1
-        echo Starting Coordinator on ${SERVERS_EXTERNAL[$i]}:$PORT_COORDINATOR
+        echo Starting Coordinator on ${SERVERS_EXTERNAL_ARR[$i]}:$PORT_COORDINATOR
 
-        $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL[$i]} $SSH_SUFFIX \
+        $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[$i]} $SSH_SUFFIX \
          docker run --detach=true -v $COORDINATOR_DATA:/data \
             -v $COORDINATOR_LOGS:/logs --net=host \
             --name=coordinator$PORT_COORDINATOR \
             ${DOCKER_IMAGE_NAME} \
           arangod --database.directory /data \
-           --cluster.agency-endpoint tcp://${SERVERS_INTERNAL[0]}:4001 \
-           --cluster.my-address tcp://${SERVERS_INTERNAL[$i]}:$PORT_COORDINATOR \
+           --cluster.agency-endpoint tcp://${SERVERS_INTERNAL_ARR[0]}:4001 \
+           --cluster.my-address tcp://${SERVERS_INTERNAL_ARR[$i]}:$PORT_COORDINATOR \
            --server.endpoint tcp://0.0.0.0:$PORT_COORDINATOR \
            --cluster.my-local-info \
-                     coordinator:${SERVERS_INTERNAL[$i]}:$PORT_COORDINATOR \
+                     coordinator:${SERVERS_INTERNAL_ARR[$i]}:$PORT_COORDINATOR \
            --log.file /logs/$PORT_COORDINATOR.log >/dev/null
     }
 
@@ -210,25 +210,25 @@ startArangoDBClusterWithDocker() {
     }
 
     #for i in `seq 0 $LASTDBSERVER` ; do
-    #    testServer ${SERVERS_EXTERNAL[$i]}:$PORT_DBSERVER
+    #    testServer ${SERVERS_EXTERNAL_ARR[$i]}:$PORT_DBSERVER
     #done
 
     for i in `seq 0 $LASTCOORDINATOR` ; do
-        testServer ${SERVERS_EXTERNAL[$i]}:$PORT_COORDINATOR
+        testServer ${SERVERS_EXTERNAL_ARR[$i]}:$PORT_COORDINATOR
     done
 
     echo Bootstrapping DBServers...
-    curl -s -X POST "http://${SERVERS_EXTERNAL[0]}:$PORT_COORDINATOR/_admin/cluster/bootstrapDbServers" \
+    curl -s -X POST "http://${SERVERS_EXTERNAL_ARR[0]}:$PORT_COORDINATOR/_admin/cluster/bootstrapDbServers" \
          -d '{"isRelaunch":false}' >/dev/null 2>&1
 
     echo Running DB upgrade on cluster...
-    curl -s -X POST "http://${SERVERS_EXTERNAL[0]}:$PORT_COORDINATOR/_admin/cluster/upgradeClusterDatabase" \
+    curl -s -X POST "http://${SERVERS_EXTERNAL_ARR[0]}:$PORT_COORDINATOR/_admin/cluster/upgradeClusterDatabase" \
          -d '{"isRelaunch":false}' >/dev/null 2>&1
 
     echo Bootstrapping Coordinators...
     for i in `seq 0 $LASTCOORDINATOR` ; do
-        echo Doing ${SERVERS_EXTERNAL[$i]}:$PORT_COORDINATOR
-        curl -s -X POST "http://${SERVERS_EXTERNAL[$i]}:$PORT_COORDINATOR/_admin/cluster/bootstrapCoordinator" \
+        echo Doing ${SERVERS_EXTERNAL_ARR[$i]}:$PORT_COORDINATOR
+        curl -s -X POST "http://${SERVERS_EXTERNAL_ARR[$i]}:$PORT_COORDINATOR/_admin/cluster/bootstrapCoordinator" \
              -d '{"isRelaunch":false}' >/dev/null 2>&1 &
     done
 
@@ -236,7 +236,7 @@ startArangoDBClusterWithDocker() {
 
     echo Done, your cluster is ready at
     for i in `seq 0 $LASTCOORDINATOR` ; do
-        echo "   docker run -it --rm --net=host ${DOCKER_IMAGE_NAME} arangosh --server.endpoint tcp://${SERVERS_EXTERNAL[$i]}:$PORT_COORDINATOR"
+        echo "   docker run -it --rm --net=host ${DOCKER_IMAGE_NAME} arangosh --server.endpoint tcp://${SERVERS_EXTERNAL_ARR[$i]}:$PORT_COORDINATOR"
     done
 
 }
