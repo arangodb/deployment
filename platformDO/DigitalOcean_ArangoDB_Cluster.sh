@@ -75,6 +75,7 @@ DigitalOceanDestroyMachines() {
     if [[ $REPLY =~ ^[Yy]$ ]]
       then
         rm -r "$OUTPUT"
+        echo "Directory deleted. Finished."
       else
         echo "For a new cluster instance, please remove the directory or specifiy another output directory with -d '/my/directory'"
     fi
