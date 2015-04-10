@@ -1,5 +1,5 @@
-#!/bin/bash
 # This starts multiple coreos instances using digital ocean cloud platform
+# and then starts an ArangoDB cluster on them.
 #
 # Prerequisites:
 # The following environment variables are used:
@@ -393,5 +393,4 @@ export SSH_SUFFIX="-i $HOME/.ssh/arangodb_key -l $SSH_USER"
 
 sleep 10
 
-./startDockerCluster.sh
-
+startArangoDBClusterWithDocker
