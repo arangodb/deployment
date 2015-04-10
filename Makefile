@@ -1,4 +1,4 @@
-all: DigitalOcean_ArangoDB_Cluster.sh GoogleComputeEngine_ArangoDB_Cluster.sh
+all: DigitalOcean_ArangoDB_Cluster.sh GoogleComputeEngine_ArangoDB_Cluster.sh Azure_ArangoDB_Cluster.sh
 
 DigitalOcean_ArangoDB_Cluster.sh: Makefile platformDO/DigitalOcean_ArangoDB_Cluster.sh Docker/ArangoDBClusterWithDocker.sh
 	echo "#!/bin/bash" > $@
@@ -12,5 +12,11 @@ GoogleComputeEngine_ArangoDB_Cluster.sh: Makefile platformGCE/GoogleComputeEngin
 	cat platformGCE/GoogleComputeEngine_ArangoDB_Cluster.sh >> $@
 	chmod 755 $@
 
+Azure_ArangoDB_Cluster.sh: Makefile platformAZURE/Azure_ArangoDB_Cluster.sh Docker/ArangoDBClusterWithDocker.sh
+	echo "#!/bin/bash" > $@
+	cat Docker/ArangoDBClusterWithDocker.sh >> $@
+	cat platformAZURE/Azure_ArangoDB_Cluster.sh >> $@
+	chmod 755 $@
+
 clean:
-	rm -f DigitalOcean_ArangoDB_Cluster.sh GoogleComputeEngine_ArangoDB_Cluster.sh
+	rm -f DigitalOcean_ArangoDB_Cluster.sh GoogleComputeEngine_ArangoDB_Cluster.sh Azure_ArangoDB_Cluster.sh
