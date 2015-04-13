@@ -34,7 +34,7 @@
 
 startArangoDBClusterWithDocker() {
 
-    DOCKER_IMAGE_NAME=neunhoef/arangodb_cluster:2.5.1-fix
+    DOCKER_IMAGE_NAME=neunhoef/arangodb_cluster:latest
 
     # Two docker images are needed: 
     #  microbox/etcd for the agency and
