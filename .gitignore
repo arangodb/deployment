@@ -1,4 +1,7 @@
 DigitalOcean_ArangoDB_Cluster.sh
+AmazonWebServices_ArangoDB_Cluster.sh
+Azure_ArangoDB_Cluster.sh
+GoogleComputeEngine_ArangoDB_Cluster.sh
 digital_ocean/
 azure/
 gce/
