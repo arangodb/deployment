@@ -17,9 +17,9 @@ ZONE="eu-central-1"
 
 #CoreOS AWS Image List
 #https://coreos.com/docs/running-coreos/cloud-providers/ec2/
-IMAGE="ami-0c300d11"
+IMAGE="ami-0e300d13"
 
-MACHINE_TYPE="t2.micro"
+MACHINE_TYPE="t1.medium"
 NUMBER="3"
 OUTPUT="aws"
 PROJECT=""
@@ -118,21 +118,12 @@ echo "OUTPUT DIRECTORY: $OUTPUT"
 echo "ZONE: $ZONE"
 echo "PROJECT: $PROJECT"
 
-if test -z "$ZONE";  then
+#check if project is already set
+zone=`cat $HOME/.aws/config | grep region`
 
-  #check if project is already set
-  zone=`cat $HOME/.aws/config | grep region`
-
-  if test -z "$zone";  then
-    echo "$0: you must supply a zone with '-z' or set it with aws configuration'"
-    exit 1
-  else
-    echo "aws zone already set."
-  fi
-
-else
-  echo "Setting aws zone attribute"
-  aws configure --region "$ZONE"
+if test -z "$zone";  then
+  echo "AWS zone is not configured. Please run: aws configure"
+  exit 1
 fi
 
 if test -e "$OUTPUT";  then
@@ -161,20 +152,16 @@ if [[ -s "$HOME/.ssh/arangodb_aws_key" ]] ; then
 else
   echo "No AWS SSH-Key existing. Creating a new SSH-Key."
 
-    ssh-keygen -t dsa -f "$OUTPUT/arangodb_aws_key" -C "arangodb@arangodb.com"
+  aws ec2 create-key-pair --key-name "arangodb_aws_key" --output text > arangodb_aws_key
 
-    if [ $? -eq 0 ]; then
-      echo OK
-    else
-      echo Failed to create SSH-Key. Exiting.
-      exit 1
-    fi
+  if [ $? -eq 0 ]; then
+    echo OK
+  else
+    echo Failed to create SSH-Key. Exiting.
+    exit 1
+  fi
 
-    cp "$OUTPUT/arangodb_aws_key*" $HOME/.ssh/
-
-  echo "Importing key..."
-  aws ec2 import-key-pair --key-name "arangodb_aws_key" --public-key-material "$HOME/.ssh/arangodb_aws_key.pub"
-  #aws ec2-import-keypair "arangodb_aws_key" --public-key-file "$HOME/.ssh/arangodb_aws_key.pub"
+  cp "$OUTPUT/arangodb_aws_key"* "$HOME/.ssh/"
 fi ;
 
 #check if ssh agent is running
@@ -195,20 +182,36 @@ fi
 #FIREWALL TODO
 #add firewall rule for arangodb-test tag
 #gcloud compute firewall-rules create "arangodb-test" --allow tcp:8529 --target-tags "arangodb-test"
+function getMachine () {
+  currentid=`cat $OUTPUT/temp/IDS$1`
+  aws ec2 describe-instances --instance-ids $currentid
+  public=`aws ec2 describe-instances --instance-ids $currentid | grep PublicIpAddress | awk '{print $2}' | cut -c 2- | rev | cut -c 3- | rev`
+
+  state=0
+  while [ "$state" == 0 ]; do
+    if test -z "$public";  then
+     echo "Machine $PREFIX$1 not ready yet."
+     sleep 3
+    else
+     echo "Machine $PREFIX$1 ready."
+     state=1
+    fi
+  done
+
+  echo $public > "$OUTPUT/temp/EXTERNAL$1"
+}
 
 function createMachine () {
   echo "creating machine $PREFIX$1"
-  INSTANCE=`gcloud compute instances create --image coreos --zone "$ZONE" \
-            --tags "arangodb-test" --machine-type "$MACHINE_TYPE" "$PREFIX$1" | grep "^$PREFIX"`
 
-  aws ec2 run-instances --image-id "$IMAGE" --count 1 --instance-type t1.micro --key-name "arangodb_aws_key"
-  #aws opsworks --region "$ZONE" create-instance --hostname "$PREFIX$1" --instance-type "$MACHINE_TYPE" --os "$IMAGE"
+  INSTANCE=`aws ec2 run-instances --image-id "$IMAGE" --count 1 --instance-type t2.medium \
+  --key-name "arangodb_aws_key" --associate-public-ip-address`
 
-  a=`echo $INSTANCE | awk '{print $4}'`
-  b=`echo $INSTANCE | awk '{print $5}'`
+  id=`echo $INSTANCE | python -mjson.tool | grep InstanceId | awk '{print $2}' | cut -c 2- | rev | cut -c 3- | rev`
+  priv=`echo $INSTANCE | python -mjson.tool | grep PrivateIpAddress | awk '{print $2}' | head -n 1 | cut -c 2- | rev | cut -c 3- | rev`
 
-  echo $a > "$OUTPUT/temp/INTERNAL$1"
-  echo $b > "$OUTPUT/temp/EXTERNAL$1"
+  echo $priv > "$OUTPUT/temp/INTERNAL$1"
+  echo $id > "$OUTPUT/temp/IDS$1"
 }
 
 #CoreOS PARAMS
@@ -221,7 +224,14 @@ SSH_CMD="ssh"
 
 for i in `seq $NUMBER`; do
   createMachine $i &
-  sleep 1
+done
+
+wait
+
+sleep 5
+
+for i in `seq $NUMBER`; do
+  getMachine $i &
 done
 
 wait
