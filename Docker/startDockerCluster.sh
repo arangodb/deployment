@@ -34,7 +34,7 @@
 # via ssh using the following command for server number i:
 #   ${SSH_CMD} "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL[i]} ${SSH_SUFFIX} docker run ...
 
-DOCKER_IMAGE_NAME=neunhoef/arangodb_cluster:2.5.1-fix
+DOCKER_IMAGE_NAME=neunhoef/arangodb_cluster:latest
 
 # Two docker images are needed: 
 #  microbox/etcd for the agency and
