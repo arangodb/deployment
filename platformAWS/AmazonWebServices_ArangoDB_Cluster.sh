@@ -202,7 +202,7 @@ fi
 
 
 echo "Creating Security Group"
-secureid=`aws ec2 describe-security-groups --group-names arangodb-test-security |python -mjson.tool|grep GroupId| awk {'print $2'}| cut -c 2- | rev | cut -c 3- | rev`
+secureid=`aws ec2 describe-security-groups --output json --group-names arangodb-test-security |python -mjson.tool|grep GroupId| awk {'print $2'}| cut -c 2- | rev | cut -c 3- | rev`
 aws ec2 create-security-group \
     --group-name "arangodb-test-security" \
     --description "Open SSH and needed ArangoDB Ports"
@@ -237,7 +237,7 @@ wait
 
 function getMachine () {
   currentid=`cat $OUTPUT/temp/IDS$1`
-  public=`aws ec2 describe-instances --instance-ids $currentid | grep PublicIpAddress | awk '{print $2}' | cut -c 2- | rev | cut -c 3- | rev`
+  public=`aws ec2 describe-instances --output json --instance-ids $currentid | grep PublicIpAddress | awk '{print $2}' | cut -c 2- | rev | cut -c 3- | rev`
 
   state=0
   while [ "$state" == 0 ]; do
@@ -256,7 +256,7 @@ function getMachine () {
 function createMachine () {
   echo "creating machine $PREFIX$1"
 
-  INSTANCE=`aws ec2 run-instances --image-id "$IMAGE" --count 1 --instance-type t2.medium \
+  INSTANCE=`aws ec2 run-instances --output json --image-id "$IMAGE" --count 1 --instance-type t2.medium \
   --key-name "arangodb_aws_key" --associate-public-ip-address --subnet-id "$subnetid"`
 
   id=`echo $INSTANCE | python -mjson.tool | grep InstanceId | awk '{print $2}' | cut -c 2- | rev | cut -c 3- | rev`
@@ -275,7 +275,7 @@ function setMachineName () {
 function setMachineSecurity () {
   echo "Adding security groups."
   id=`cat "$OUTPUT/temp/IDS$i"`
-  secureid=`aws ec2 describe-security-groups --group-names arangodb-test-security |python -mjson.tool|grep GroupId| awk {'print $2'}| cut -c 2- | rev | cut -c 3- | rev`
+  secureid=`aws ec2 describe-security-groups --output json --group-names arangodb-test-security |python -mjson.tool|grep GroupId| awk {'print $2'}| cut -c 2- | rev | cut -c 3- | rev`
   aws ec2 modify-instance-attribute --instance-id "$id" --groups "$secureid"
 }
 
