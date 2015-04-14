@@ -22,16 +22,14 @@ IMAGE="ami-0e300d13"
 MACHINE_TYPE="t1.medium"
 NUMBER="3"
 OUTPUT="aws"
-PROJECT=""
 SSH_KEY_PATH=""
 DEFAULT_KEY_PATH="$HOME/.ssh/arangodb_aws_key"
 
 function deleteMachine () {
   echo "deleting machine $PREFIX$1"
-  id=${SERVERS_IDS[`expr $1 - 1`]}
+  id=${SERVERS_IDS_ARR[`expr $1 - 1`]}
 
-  #TODO DELETE AWS
-  ##gcloud compute instances delete "$id" --zone "$ZONE" -q
+  aws ec2 terminate-instances --instance-ids "$id"
 }
 
 AmazonWebServicesDestroyMachines() {
@@ -51,14 +49,15 @@ AmazonWebServicesDestroyMachines() {
     echo "OUTPUT DIRECTORY: $OUTPUT"
     echo "MACHINE PREFIX: $PREFIX"
 
-    #firewall TODO
-    #gcloud compute firewall-rules delete "arangodb-test"
-
     for i in `seq $NUMBER`; do
       deleteMachine $i &
     done
 
     wait
+
+    echo "Removing old Security Group: arangodb-test-security"
+    sleep 30
+    aws ec2 delete-security-group --group-name "arangodb-test-security"
 
     exit 0
 }
@@ -152,7 +151,7 @@ if [[ -s "$HOME/.ssh/arangodb_aws_key" ]] ; then
 else
   echo "No AWS SSH-Key existing. Creating a new SSH-Key."
 
-  aws ec2 create-key-pair --key-name "arangodb_aws_key" --output text > arangodb_aws_key
+  ssh-keygen -t rsa -C "arangodb_aws_key" -f "$OUTPUT"/arangodb_aws_key
 
   if [ $? -eq 0 ]; then
     echo OK
@@ -162,6 +161,9 @@ else
   fi
 
   cp "$OUTPUT/arangodb_aws_key"* "$HOME/.ssh/"
+  chmod 400 "$HOME"/.ssh/arangodb_aws_key
+  aws ec2 import-key-pair --key-name "arangodb_aws_key" --public-key-material file://$HOME/.ssh/arangodb_aws_key.pub
+
 fi ;
 
 #check if ssh agent is running
@@ -179,12 +181,62 @@ if [ -n "${SSH_AUTH_SOCK}" ]; then
     echo "No SSH-Agent running. Skipping."
 fi
 
-#FIREWALL TODO
-#add firewall rule for arangodb-test tag
-#gcloud compute firewall-rules create "arangodb-test" --allow tcp:8529 --target-tags "arangodb-test"
+#echo "Creating VPC"
+#a=`aws ec2 create-vpc --cidr-block 10.0.0.0/16`
+#
+#echo $a
+#echo ========
+#echo
+#vpcid=`echo a | python -mjson.tool | grep VpcId | awk {'print $9'} | cut -c 2- | rev | cut -c 3- | rev`
+
+#echo $vpcid 
+#exit 1 
+#echo $vpcid > $OUTPUT/vpcid
+
+#echo "Creating Subnet"
+#aws ec2 create-subnet --vpc-id "$vpcid" --cidr-block 10.0.1.0/24 --availability-zone "$ZONE"
+#subnetid=`echo a | python -mjson.tool | grep SubnetId | awk {'print $2'} | cut -c 2- | rev | cut -c 3- | rev`
+#echo $subnetid > $OUTPUT/subnetid
+
+#exit 1
+
+
+echo "Creating Security Group"
+secureid=`aws ec2 describe-security-groups --group-names arangodb-test-security |python -mjson.tool|grep GroupId| awk {'print $2'}| cut -c 2- | rev | cut -c 3- | rev`
+aws ec2 create-security-group \
+    --group-name "arangodb-test-security" \
+    --description "Open SSH and needed ArangoDB Ports"
+
+aws ec2 authorize-security-group-ingress \
+    --group-name "arangodb-test-security" \
+    --cidr 0.0.0.0/0 \
+    --protocol tcp --port 22
+
+aws ec2 authorize-security-group-ingress \
+    --group-name "arangodb-test-security" \
+    --cidr 0.0.0.0/0 \
+    --protocol tcp --port 8529
+
+aws ec2 authorize-security-group-ingress \
+    --group-name "arangodb-test-security" \
+    --cidr 0.0.0.0/0 \
+    --protocol tcp --port 8629
+
+aws ec2 authorize-security-group-ingress \
+    --group-name "arangodb-test-security" \
+    --cidr 0.0.0.0/0 \
+    --protocol tcp --port 7001
+
+aws ec2 authorize-security-group-ingress \
+    --group-name "arangodb-test-security" \
+    --cidr 0.0.0.0/0 \
+    --protocol tcp --port 4001
+
+    #--source-group "$secureid" \
+wait
+
 function getMachine () {
   currentid=`cat $OUTPUT/temp/IDS$1`
-  aws ec2 describe-instances --instance-ids $currentid
   public=`aws ec2 describe-instances --instance-ids $currentid | grep PublicIpAddress | awk '{print $2}' | cut -c 2- | rev | cut -c 3- | rev`
 
   state=0
@@ -205,13 +257,26 @@ function createMachine () {
   echo "creating machine $PREFIX$1"
 
   INSTANCE=`aws ec2 run-instances --image-id "$IMAGE" --count 1 --instance-type t2.medium \
-  --key-name "arangodb_aws_key" --associate-public-ip-address`
+  --key-name "arangodb_aws_key" --associate-public-ip-address --subnet-id "$subnetid"`
 
   id=`echo $INSTANCE | python -mjson.tool | grep InstanceId | awk '{print $2}' | cut -c 2- | rev | cut -c 3- | rev`
   priv=`echo $INSTANCE | python -mjson.tool | grep PrivateIpAddress | awk '{print $2}' | head -n 1 | cut -c 2- | rev | cut -c 3- | rev`
 
   echo $priv > "$OUTPUT/temp/INTERNAL$1"
   echo $id > "$OUTPUT/temp/IDS$1"
+}
+
+function setMachineName () {
+  echo "Setting up machine names."
+  id=`cat "$OUTPUT/temp/IDS$i"`
+  aws ec2 create-tags --resources $id --tags Key=Name,Value=$PREFIX$1
+}
+
+function setMachineSecurity () {
+  echo "Adding security groups."
+  id=`cat "$OUTPUT/temp/IDS$i"`
+  secureid=`aws ec2 describe-security-groups --group-names arangodb-test-security |python -mjson.tool|grep GroupId| awk {'print $2'}| cut -c 2- | rev | cut -c 3- | rev`
+  aws ec2 modify-instance-attribute --instance-id "$id" --groups "$secureid"
 }
 
 #CoreOS PARAMS
@@ -236,7 +301,17 @@ done
 
 wait
 
-exit 0
+for i in `seq $NUMBER`; do
+  setMachineName $i &
+done
+
+wait
+
+for i in `seq $NUMBER`; do
+  setMachineSecurity $i &
+done
+
+wait
 
 while :
 do
@@ -246,13 +321,11 @@ do
   for i in `seq $NUMBER`; do
 
     if [ -s "$OUTPUT/temp/INTERNAL$i" ] ; then
-      echo "Machine $PREFIX$i finished"
       SERVERS_INTERNAL_AWS[`expr $i - 1`]=`cat "$OUTPUT/temp/INTERNAL$i"`
       SERVERS_EXTERNAL_AWS[`expr $i - 1`]=`cat "$OUTPUT/temp/EXTERNAL$i"`
-      SERVERS_IDS_AWS[`expr $i - 1`]=$PREFIX$i
+      SERVERS_IDS_AWS[`expr $i - 1`]=`cat "$OUTPUT/temp/IDS$i"`
       FINISHED=1
     else
-      echo "Machine $PREFIX$i not ready yet."
       FINISHED=0
       break
     fi
