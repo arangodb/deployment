@@ -60,7 +60,7 @@ AzureDestroyMachines() {
   wait
 
   echo "Destroying virtual network"
-  azure network vnet delete "arangodb-test-vnet"
+  azure network vnet delete "${PREFIX}vnet"
 
   exit 0
 }
@@ -223,7 +223,7 @@ function createMachine () {
   while [ "$ok" == "0" ] ; do
     echo "creating machine $PREFIX$1"
     azure vm create --vm-size "$MACHINE_TYPE" --userName "core" --ssh 22 --ssh-cert "${DEFAULT_KEY_PATH}.pem" \
-      --virtual-network-name "arangodb-test-vnet" --no-ssh-password "$PREFIX$1" "$IMAGE" >>/tmp/azure$1.log
+      --virtual-network-name "${PREFIX}vnet" --no-ssh-password "$PREFIX$1" "$IMAGE" >>/tmp/azure$1.log
     if [ $? -eq 0 ]; then
       ok=1
     else
@@ -250,7 +250,7 @@ declare -a SERVERS_INTERNAL_AZURE
 declare -a SERVERS_IDS_AZURE
 
 echo "Creating virtual network"
-azure network vnet create "arangodb-test-vnet" --location "$ZONE"
+azure network vnet create "${PREFIX}vnet" --location "$ZONE"
 
 for i in `seq $NUMBER`; do
   echo "Creating services for virtual machines."
