@@ -25,7 +25,7 @@ DEFAULT_KEY_PATH="$HOME/.ssh/google_compute_engine"
 
 function deleteMachine () {
   echo "deleting machine $PREFIX$1"
-  id=${SERVERS_IDS[`expr $1 - 1`]}
+  id=${SERVERS_IDS_ARR[`expr $1 - 1`]}
 
   gcloud compute instances delete "$id" --zone "$ZONE" -q
 }
