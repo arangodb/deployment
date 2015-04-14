@@ -6,18 +6,14 @@
 # Optional prerequisites:
 # The following environment variables are used:
 #
-#   ZONE  : size of the server (e.g. -z europe-west1-b)
 #   SIZE    : size/machine-type of the instance (e.g. -m n1-standard-2)
 #   NUMBER  : count of machines to create (e.g. -n 3)
 #   OUTPUT  : local output log folder (e.g. -d /my/directory)
 
 trap "kill 0" SIGINT
 
-ZONE="eu-central-1"
-
 #CoreOS AWS Image List
 #https://coreos.com/docs/running-coreos/cloud-providers/ec2/
-IMAGE="ami-0e300d13"
 
 MACHINE_TYPE="t1.medium"
 NUMBER="3"
@@ -64,7 +60,7 @@ AmazonWebServicesDestroyMachines() {
 
 REMOVE=0
 
-while getopts ":z:m:n:d:s:hr" opt; do
+while getopts ":m:n:d:s:hr" opt; do
   case $opt in
     h)
        cat <<EOT
@@ -76,14 +72,10 @@ Use -r to permanently remove an existing cluster and all machine instances.
 Optional prerequisites:
 The following environment variables are used:
 
-  ZONE  : size of the server (e.g. -z europe-west1-b)
   SIZE    : size/machine-type of the instance (e.g. -m n1-standard-2)
   NUMBER  : count of machines to create (e.g. -n 3)
   OUTPUT  : local output log folder (e.g. -d /my/directory)
 EOT
-      ;;
-    z)
-      ZONE="$OPTARG"
       ;;
     m)
       MACHINE_TYPE="$OPTARG"
@@ -118,12 +110,55 @@ echo "ZONE: $ZONE"
 echo "PROJECT: $PROJECT"
 
 #check if project is already set
-zone=`cat $HOME/.aws/config | grep region`
+zone=`cat $HOME/.aws/config | grep region | awk {'print $3'}`
 
 if test -z "$zone";  then
   echo "AWS zone is not configured. Please run: aws configure"
   exit 1
+else
+  ZONE=$zone
 fi
+
+#We have to keep all ami's up to date
+# Current Version: CoreOS 607.0.0
+# URL: https://coreos.com/docs/running-coreos/cloud-providers/ec2/
+
+if [ "$zone" == "eu-central-1" ]; then
+  IMAGE="ami-0e300d13"
+fi
+
+if [ "$zone" == "ap-northeast-1" ]; then
+  IMAGE="ami-af28dcaf"
+fi
+
+if [ "$zone" == "sa-east-1" ]; then
+  IMAGE="ami-2354ec3e"
+fi
+
+if [ "$zone" == "ap-southeast-2" ]; then
+  IMAGE="ami-b9b5c583"
+fi
+
+if [ "$zone" == "ap-southeast-1" ]; then
+  IMAGE="mi-f80b3aaa"
+fi
+
+if [ "$zone" == "us-east-1" ]; then
+  IMAGE="ami-323b195a"
+fi
+
+if [ "$zone" == "us-west-2" ]; then
+  IMAGE="ami-0789a437"
+fi
+
+if [ "$zone" == "us-west-1" ]; then
+  IMAGE="ami-8dd533c9"
+fi
+
+if [ "$zone" == "eu-west-1" ]; then
+  IMAGE="ami-55950a22"
+fi
+
 
 if test -e "$OUTPUT";  then
   if [ "$REMOVE" == "1" ] ; then
