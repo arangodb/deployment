@@ -45,7 +45,7 @@ AzureDestroyMachines() {
 
   declare -a SERVERS_IDS_ARR=(${SERVERS_IDS[@]})
 
-  NUMBER=${#SERVERS_IDS[@]}
+  NUMBER=${#SERVERS_IDS_ARR[@]}
 
   echo "NUMBER OF MACHINES: $NUMBER"
   echo "OUTPUT DIRECTORY: $OUTPUT"
