@@ -80,6 +80,7 @@ Optional prerequisites:
   NUMBER  : count of machines to create (e.g. -n 3)
   OUTPUT  : local output log folder (e.g. -d /my/directory)
 EOT
+      exit 0
       ;;
     z)
       ZONE="$OPTARG"
