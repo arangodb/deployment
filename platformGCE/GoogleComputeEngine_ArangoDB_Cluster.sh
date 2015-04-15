@@ -48,7 +48,7 @@ GoogleComputeEngineDestroyMachines() {
     echo "MACHINE PREFIX: $PREFIX"
 
 
-    gcloud compute firewall-rules delete "$PREFIX-firewall"
+    gcloud compute firewall-rules delete "${PREFIX}firewall"
 
     for i in `seq $NUMBER`; do
       deleteMachine $i &
@@ -200,12 +200,12 @@ if [ -n "${SSH_AUTH_SOCK}" ]; then
 fi
 
 #add firewall rule for arangodb-test tag
-gcloud compute firewall-rules create "$PREFIX-firewall" --allow tcp:8529 --target-tags "$PREFIX-tag"
+gcloud compute firewall-rules create "${PREFIX}firewall" --allow tcp:8529 --target-tags "${PREFIX}tag"
 
 function createMachine () {
   echo "creating machine $PREFIX$1"
   INSTANCE=`gcloud compute instances create --image coreos --zone "$ZONE" \
-            --tags "$PREFIX-tag" --machine-type "$MACHINE_TYPE" "$PREFIX$1" | grep "^$PREFIX"`
+            --tags "${PREFIX}tag" --machine-type "$MACHINE_TYPE" "$PREFIX$1" | grep "^$PREFIX"`
 
   a=`echo $INSTANCE | awk '{print $4}'`
   b=`echo $INSTANCE | awk '{print $5}'`
