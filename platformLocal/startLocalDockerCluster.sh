@@ -106,10 +106,8 @@ if [ "8530" != "$PORTTOPCO" ] ; then
 fi
 
 echo Bootstrapping DBServers...
-for p in `seq 8629 $PORTTOPDB` ; do
-    curl -s -X POST "http://127.0.0.1:$p/_admin/cluster/bootstrapDbServers" \
-         -d '{"isRelaunch":false}' >> /tmp/cluster/DBServer.boot.log 2>&1
-done
+curl -s -X POST "http://127.0.0.1:8530/_admin/cluster/bootstrapDbServers" \
+     -d '{"isRelaunch":false}' >> /tmp/cluster/DBServer.boot.log 2>&1
 
 echo Running DB upgrade on cluster...
 curl -s -X POST "http://127.0.0.1:8530/_admin/cluster/upgradeClusterDatabase" \

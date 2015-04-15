@@ -23,6 +23,8 @@
 #   DBSERVER_LOGS    : default: "/home/$SSH_USER/dbserver_logs"
 #   COORDINATOR_LOGS : default: "/home/$SSH_USER/coordinator_logs"
 #   AGENCY_DIR       : default: /home/$SSH_USER/agency"
+#   DBSERVER_ARGS    : default: ""
+#   COORDINATOR_ARGS : default: ""
 
 # There will be one DBserver on each machine and at most one coordinator.
 # There will be one agency running on the first machine.
@@ -34,7 +36,7 @@
 
 startArangoDBClusterWithDocker() {
 
-    DOCKER_IMAGE_NAME=neunhoef/arangodb_cluster:2.5.1-fix
+    DOCKER_IMAGE_NAME=neunhoef/arangodb_cluster:latest
 
     # Two docker images are needed: 
     #  microbox/etcd for the agency and
@@ -139,7 +141,7 @@ startArangoDBClusterWithDocker() {
     wait
 
     echo Starting agency...
-    $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[0]} $SSH_SUFFIX "docker run --detach=true -p 4001:4001 --name=agency -v $AGENCY_DIR:/data microbox/etcd:latest etcd -name agency >/home/$SSH_USER/agency.log"
+    $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[0]} $SSH_SUFFIX "docker run --detach=true -p 4001:4001 -p 7001:7001 --name=agency -e "ETCD_NONO_WAL_SYNC=1" -v $AGENCY_DIR:/data ${DOCKER_IMAGE_NAME} /usr/lib/arangodb/etcd-arango --data-dir /data --listen-client-urls "http://0.0.0.0:4001" --listen-peer-urls "http://0.0.0.0:7001" >/home/$SSH_USER/agency.log"
 
     sleep 1
     echo Initializing agency...
@@ -160,7 +162,9 @@ startArangoDBClusterWithDocker() {
           --cluster.my-address tcp://${SERVERS_INTERNAL_ARR[$i]}:$PORT_DBSERVER \
           --server.endpoint tcp://0.0.0.0:$PORT_DBSERVER \
           --cluster.my-local-info dbserver:${SERVERS_INTERNAL_ARR[$i]}:$PORT_DBSERVER \
-          --log.file /logs/$PORT_DBSERVER.log >/dev/null
+          --log.file /logs/$PORT_DBSERVER.log \
+          $DBSERVER_ARGS \
+          >/dev/null
     }
 
     start_coordinator () {
@@ -178,7 +182,9 @@ startArangoDBClusterWithDocker() {
            --server.endpoint tcp://0.0.0.0:$PORT_COORDINATOR \
            --cluster.my-local-info \
                      coordinator:${SERVERS_INTERNAL_ARR[$i]}:$PORT_COORDINATOR \
-           --log.file /logs/$PORT_COORDINATOR.log >/dev/null
+           --log.file /logs/$PORT_COORDINATOR.log \
+           $COORDINATOR_ARGS \
+           >/dev/null
     }
 
     for i in `seq 0 $LASTDBSERVER` ; do

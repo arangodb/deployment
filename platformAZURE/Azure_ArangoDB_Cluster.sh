@@ -1,13 +1,14 @@
-#!/bin/bash
-
-# This starts multiple coreos instances using microsoft azure
+# This starts multiple coreos instances using Microsoft Azure and then starts
+# an ArangoDB cluster on them.
+#
+# Use -r to permanently remove an existing cluster and all machine instances.
 #
 # Optional prerequisites:
-#   ZONE  : size of the server (e.g. -z "US West")
+#   ZONE    : site of the server (e.g. -z "US West")
 #   SIZE    : size/machine-type of the instance (e.g. -m Medium)
 #   NUMBER  : count of machines to create (e.g. -n 3)
 #   OUTPUT  : local output log folder (e.g. -d /my/directory)
-#   SSH     : path to your already on azure deployed ssh key (e.g. -s /my/directory/mykey)
+#   SSH     : path to your already on Azure deployed ssh key (e.g. -s /my/directory/mykey)
 
 trap "kill 0" SIGINT
 
@@ -19,13 +20,62 @@ IMAGE="2b171e93f07c4903bcad35bda10acf22__CoreOS-Stable-607.0.0"
 SSH_KEY_PATH=""
 DEFAULT_KEY_PATH="$OUTPUT/arangodb_azure_key"
 
-DEPLOY_KEY=0
+function deleteMachine () {
+  echo "deleting machine $PREFIX$1"
+  id=${SERVERS_IDS_ARR[`expr $1 - 1`]}
 
-while getopts ":z:m:n:d:s:h" opt; do
+  ok=0
+  while [ "$ok" == "0" ]; do
+    azure vm delete "$id" -q
+    if [ $? -eq 0 ] ; then
+      ok=1
+    else
+      echo Failed to delete service $PREFIX$1. Retrying.
+    fi
+  done
+}
+
+AzureDestroyMachines() {
+  if [ ! -e "$OUTPUT" ] ;  then
+    echo "$0: directory '$OUTPUT' not found"
+    exit 1
+  fi
+
+  . $OUTPUT/clusterinfo.sh
+
+  declare -a SERVERS_IDS_ARR=(${SERVERS_IDS[@]})
+
+  NUMBER=${#SERVERS_IDS_ARR[@]}
+
+  echo "NUMBER OF MACHINES: $NUMBER"
+  echo "OUTPUT DIRECTORY: $OUTPUT"
+  echo "MACHINE PREFIX: $PREFIX"
+
+  echo "Destroying machines"
+  for i in `seq $NUMBER`; do
+    sleep 1
+    deleteMachine $i &
+  done
+
+  wait
+
+  echo "Destroying virtual network"
+  azure network vnet delete "${PREFIX}vnet"
+
+  exit 0
+}
+
+DEPLOY_KEY=0
+REMOVE=0
+
+while getopts ":z:m:n:d:s:hr" opt; do
   case $opt in
     h)
     cat <<EOT
-This starts multiple coreos instances using microsoft azure
+This starts multiple coreos instances using Microsoft Azure and then starts
+an ArangoDB cluster on them.
+
+Use -r to permanently remove an existing cluster and all machine instances.
 
 Optional prerequisites:
   ZONE  : size of the server (e.g. -z "US West")
@@ -52,6 +102,9 @@ EOT
     s)
       SSH_KEY_PATH="$OPTARG"
       ;;
+    r)
+      REMOVE=1
+      ;;
     \?)
       echo "Invalid option: -$OPTARG" >&2
       exit 1
@@ -65,6 +118,21 @@ done
 
 PREFIX="arangodb-test-$$-"
 
+if test -e "$OUTPUT";  then
+  if [ "$REMOVE" == "1" ] ; then
+    AzureDestroyMachines
+    exit 0
+  fi
+
+  echo "$0: refusing to use existing directory '$OUTPUT'"
+  exit 1
+fi
+
+if [ "$REMOVE" == "1" ] ; then
+  echo "$0: did not find an existing directory '$OUTPUT'"
+  exit 1
+fi
+
 echo "ZONE: $ZONE"
 echo "MACHINE_TYPE: $MACHINE_TYPE"
 echo "NUMBER OF MACHINES: $NUMBER"
@@ -72,14 +140,7 @@ echo "OUTPUT DIRECTORY: $OUTPUT"
 echo "PROJECT: $PROJECT"
 echo "MACHINE PREFIX: $PREFIX"
 
-if test -e "$OUTPUT";  then
-  echo "$0: refusing to use existing directory '$OUTPUT'"
-  exit 1
-fi
-
 mkdir -p "$OUTPUT/temp"
-
-export CLOUDSDK_CONFIG="$OUTPUT/azure"
 
 if test -z "$SSH_KEY_PATH";
 then
@@ -162,7 +223,7 @@ function createMachine () {
   while [ "$ok" == "0" ] ; do
     echo "creating machine $PREFIX$1"
     azure vm create --vm-size "$MACHINE_TYPE" --userName "core" --ssh 22 --ssh-cert "${DEFAULT_KEY_PATH}.pem" \
-      --virtual-network-name "arangodb-test-vnet" --no-ssh-password "$PREFIX$1" "$IMAGE" >>/tmp/azure$1.log
+      --virtual-network-name "${PREFIX}vnet" --no-ssh-password "$PREFIX$1" "$IMAGE" >>/tmp/azure$1.log
     if [ $? -eq 0 ]; then
       ok=1
     else
@@ -189,7 +250,7 @@ declare -a SERVERS_INTERNAL_AZURE
 declare -a SERVERS_IDS_AZURE
 
 echo "Creating virtual network"
-azure network vnet create "arangodb-test-vnet" --location "$ZONE"
+azure network vnet create "${PREFIX}vnet" --location "$ZONE"
 
 for i in `seq $NUMBER`; do
   echo "Creating services for virtual machines."
@@ -281,4 +342,4 @@ echo >>$OUTPUT/clusterinfo.sh "SSH_SUFFIX=\"$SSH_SUFFIX\""
 echo >>$OUTPUT/clusterinfo.sh "PREFIX=\"$PREFIX\""
 echo >>$OUTPUT/clusterinfo.sh "ZONE=\"$ZONE\""
 
-./startDockerCluster.sh
+startArangoDBClusterWithDocker

@@ -18,6 +18,8 @@
 #   PREFIX : prefix for your machine names (e.g. "export PREFIX="arangodb-test-$$-")
 
 #set -e
+
+trap "kill 0" SIGINT
 set -u
 
 REGION="ams3"
@@ -67,6 +69,16 @@ DigitalOceanDestroyMachines() {
     done
 
     wait
+
+    read -p "Delete directory: '$OUTPUT' ? [y/n]: " -n 1 -r
+      echo
+    if [[ $REPLY =~ ^[Yy]$ ]]
+      then
+        rm -r "$OUTPUT"
+        echo "Directory deleted. Finished."
+      else
+        echo "For a new cluster instance, please remove the directory or specifiy another output directory with -d '/my/directory'"
+    fi
 
     exit 0
 }
