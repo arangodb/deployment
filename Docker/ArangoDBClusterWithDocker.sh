@@ -240,10 +240,20 @@ startArangoDBClusterWithDocker() {
 
     wait
 
-    echo Done, your cluster is ready at
+    echo ""
+    echo "================================================================================================"
+    echo "Done, your cluster is ready."
+    echo "================================================================================================"
+    echo ""
+    echo "Frontends available at:"
+    for i in `seq 0 $LASTCOORDINATOR` ; do
+        echo "   http://${SERVERS_EXTERNAL_ARR[$i]}:$PORT_COORDINATOR"
+    done
+    echo ""
+    echo "Access with docker, using arangosh:"
     for i in `seq 0 $LASTCOORDINATOR` ; do
         echo "   docker run -it --rm --net=host ${DOCKER_IMAGE_NAME} arangosh --server.endpoint tcp://${SERVERS_EXTERNAL_ARR[$i]}:$PORT_COORDINATOR"
     done
-
+    echo ""
 }
 

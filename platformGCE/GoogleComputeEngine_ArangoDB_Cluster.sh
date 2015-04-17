@@ -55,7 +55,17 @@ GoogleComputeEngineDestroyMachines() {
     done
 
     wait
-    
+
+    read -p "Delete directory: '$OUTPUT' ? [y/n]: " -n 1 -r
+      echo
+    if [[ $REPLY =~ ^[Yy]$ ]]
+      then
+        rm -r "$OUTPUT"
+        echo "Directory deleted. Finished."
+      else
+        echo "For a new cluster instance, please remove the directory or specifiy another output directory with -d '/my/directory'"
+    fi
+
     exit 0
 }
 
@@ -118,7 +128,6 @@ PREFIX="arangodb-test-$$-"
 
 echo "OUTPUT DIRECTORY: $OUTPUT"
 echo "ZONE: $ZONE"
-echo "PROJECT: $PROJECT"
 
 if test -z "$PROJECT";  then
 
@@ -201,6 +210,13 @@ fi
 
 #add firewall rule for arangodb-test tag
 gcloud compute firewall-rules create "${PREFIX}firewall" --allow tcp:8529 --target-tags "${PREFIX}tag"
+
+if [ $? -eq 0 ]; then
+  echo
+else
+  echo Your gcloud settings are not correct. Exiting.
+  exit 1
+fi
 
 function createMachine () {
   echo "creating machine $PREFIX$1"
