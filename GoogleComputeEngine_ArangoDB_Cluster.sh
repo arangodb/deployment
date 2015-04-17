@@ -1,4 +1,8 @@
 #!/bin/bash
+#
+# This script is provided as-is, no warrenty is provided or implied.
+# The author is NOT responsible for any damages or data loss that may occur through the use of this script.
+#
 # This function starts a ArangoDB cluster by just using docker
 #
 # Prerequisites:
