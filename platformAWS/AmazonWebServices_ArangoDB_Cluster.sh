@@ -110,7 +110,7 @@ echo "ZONE: $ZONE"
 echo "PROJECT: $PROJECT"
 
 #check if project is already set
-zone=`cat $HOME/.aws/config | grep region | awk {'print $3'}`
+zone=`cat $HOME/.aws/config | grep region | awk {'print $3'}`
 
 if test -z "$zone";  then
   echo "AWS zone is not configured. Please run: aws configure"
