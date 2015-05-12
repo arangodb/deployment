@@ -134,7 +134,7 @@ startArangoDBClusterWithDocker() {
     fi
     echo COORDINATOR_LOGS=$COORDINATOR_LOGS
 
-    echo Creating directories on servers
+    echo Creating directories on servers. This may take some time. Please wait.
     $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[0]} $SSH_SUFFIX mkdir $AGENCY_DIR >/dev/null 2>&1 &
     for i in `seq 0 $LASTDBSERVER` ; do
       $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[$i]} $SSH_SUFFIX mkdir $DBSERVER_DATA $DBSERVER_LOGS >/dev/null 2>&1 &
