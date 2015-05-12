@@ -57,7 +57,7 @@ AmazonWebServicesDestroyMachines() {
     wait
 
     echo "Removing old Security Group: ${PREFIX}security"
-    sleep 30
+    sleep 45
     aws ec2 delete-security-group --group-name "${PREFIX}security"
 
     echo "Removing old SSH-Keys: ${PREFIX}aws-ssh-key"
