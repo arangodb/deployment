@@ -19,13 +19,18 @@ MACHINE_TYPE="t1.medium"
 NUMBER="3"
 OUTPUT="aws"
 SSH_KEY_PATH=""
-DEFAULT_KEY_PATH="$HOME/.ssh/arangodb_aws_key"
 
 function deleteMachine () {
   echo "deleting machine $PREFIX$1"
   id=${SERVERS_IDS_ARR[`expr $1 - 1`]}
 
   aws ec2 terminate-instances --instance-ids "$id"
+
+  if [ $? -eq 0 ]; then
+    echo "OK: Deleted instance $id"
+  else
+    echo "ERROR: instance $id could not be deleted."
+  fi
 }
 
 AmazonWebServicesDestroyMachines() {
@@ -51,9 +56,25 @@ AmazonWebServicesDestroyMachines() {
 
     wait
 
-    echo "Removing old Security Group: arangodb-test-security"
+    echo "Removing old Security Group: ${PREFIX}security"
     sleep 30
-    aws ec2 delete-security-group --group-name "arangodb-test-security"
+    aws ec2 delete-security-group --group-name "${PREFIX}security"
+
+    echo "Removing old SSH-Keys: ${PREFIX}aws-ssh-key"
+    aws ec2 delete-key-pair --key-name "${PREFIX}aws-ssh-key"
+    rm -f "$HOME/.ssh/${PREFIX}aws-ssh-key"*
+
+    wait
+
+    read -p "Delete directory: '$OUTPUT' ? [y/n]: " -n 1 -r
+      echo
+    if [[ $REPLY =~ ^[Yy]$ ]]
+      then
+        rm -r "$OUTPUT"
+        echo "Directory deleted. Finished."
+      else
+        echo "For a new cluster instance, please remove the directory or specifiy another output directory with -d '/my/directory'"
+    fi
 
     exit 0
 }
@@ -104,13 +125,14 @@ EOT
 done
 
 PREFIX="arangodb-test-$$-"
-
 echo "OUTPUT DIRECTORY: $OUTPUT"
 echo "ZONE: $ZONE"
 echo "PROJECT: $PROJECT"
 
+DEFAULT_KEY_PATH="$HOME/.ssh/${PREFIX}aws-ssh-key"
+
 #check if project is already set
-zone=`cat $HOME/.aws/config | grep region | awk {'print $3'}`
+zone=`cat $HOME/.aws/config | grep region |awk {'print $3'}`
 
 if test -z "$zone";  then
   echo "AWS zone is not configured. Please run: aws configure"
@@ -181,12 +203,12 @@ echo "MACHINE PREFIX: $PREFIX"
 
 mkdir -p "$OUTPUT/temp"
 
-if [[ -s "$HOME/.ssh/arangodb_aws_key" ]] ; then
+if [[ -s "$HOME/.ssh/${PREFIX}aws-ssh-key" ]] ; then
   echo "AWS SSH-Key existing."
 else
   echo "No AWS SSH-Key existing. Creating a new SSH-Key."
 
-  ssh-keygen -t rsa -C "arangodb_aws_key" -f "$OUTPUT"/arangodb_aws_key
+  ssh-keygen -t rsa -C "${PREFIX}aws-ssh-key" -f "$OUTPUT"/${PREFIX}aws-ssh-key
 
   if [ $? -eq 0 ]; then
     echo OK
@@ -195,9 +217,9 @@ else
     exit 1
   fi
 
-  cp "$OUTPUT/arangodb_aws_key"* "$HOME/.ssh/"
-  chmod 400 "$HOME"/.ssh/arangodb_aws_key
-  aws ec2 import-key-pair --key-name "arangodb_aws_key" --public-key-material file://$HOME/.ssh/arangodb_aws_key.pub
+  cp "$OUTPUT/${PREFIX}aws-ssh-key"* "$HOME/.ssh/"
+  chmod 400 "$HOME"/.ssh/${PREFIX}aws-ssh-key
+  aws ec2 import-key-pair --key-name "${PREFIX}aws-ssh-key" --public-key-material file://$HOME/.ssh/${PREFIX}aws-ssh-key.pub
 
 fi ;
 
@@ -237,33 +259,38 @@ fi
 
 
 echo "Creating Security Group"
-secureid=`aws ec2 describe-security-groups --output json --group-names arangodb-test-security |python -mjson.tool|grep GroupId| awk {'print $2'}| cut -c 2- | rev | cut -c 3- | rev`
+#secureid=`aws ec2 describe-security-groups --output json --group-names ${PREFIX}security |python -mjson.tool|grep GroupId| awk {'print $2'}| cut -c 2- | rev | cut -c 3- | rev`
 aws ec2 create-security-group \
-    --group-name "arangodb-test-security" \
+    --group-name "${PREFIX}security" \
     --description "Open SSH and needed ArangoDB Ports"
 
+wait
 aws ec2 authorize-security-group-ingress \
-    --group-name "arangodb-test-security" \
+    --group-name "${PREFIX}security" \
     --cidr 0.0.0.0/0 \
     --protocol tcp --port 22
 
+wait
 aws ec2 authorize-security-group-ingress \
-    --group-name "arangodb-test-security" \
+    --group-name "${PREFIX}security" \
     --cidr 0.0.0.0/0 \
     --protocol tcp --port 8529
 
+wait
 aws ec2 authorize-security-group-ingress \
-    --group-name "arangodb-test-security" \
+    --group-name "${PREFIX}security" \
     --cidr 0.0.0.0/0 \
     --protocol tcp --port 8629
 
+wait
 aws ec2 authorize-security-group-ingress \
-    --group-name "arangodb-test-security" \
+    --group-name "${PREFIX}security" \
     --cidr 0.0.0.0/0 \
     --protocol tcp --port 7001
 
+wait
 aws ec2 authorize-security-group-ingress \
-    --group-name "arangodb-test-security" \
+    --group-name "${PREFIX}security" \
     --cidr 0.0.0.0/0 \
     --protocol tcp --port 4001
 
@@ -292,7 +319,7 @@ function createMachine () {
   echo "creating machine $PREFIX$1"
 
   INSTANCE=`aws ec2 run-instances --output json --image-id "$IMAGE" --count 1 --instance-type t2.medium \
-  --key-name "arangodb_aws_key" --associate-public-ip-address --subnet-id "$subnetid"`
+  --key-name "${PREFIX}aws-ssh-key" --associate-public-ip-address --subnet-id "$subnetid"`
 
   id=`echo $INSTANCE | python -mjson.tool | grep InstanceId | awk '{print $2}' | cut -c 2- | rev | cut -c 3- | rev`
   priv=`echo $INSTANCE | python -mjson.tool | grep PrivateIpAddress | awk '{print $2}' | head -n 1 | cut -c 2- | rev | cut -c 3- | rev`
@@ -310,7 +337,7 @@ function setMachineName () {
 function setMachineSecurity () {
   echo "Adding security groups."
   id=`cat "$OUTPUT/temp/IDS$i"`
-  secureid=`aws ec2 describe-security-groups --output json --group-names arangodb-test-security |python -mjson.tool|grep GroupId| awk {'print $2'}| cut -c 2- | rev | cut -c 3- | rev`
+  secureid=`aws ec2 describe-security-groups --output json --group-names ${PREFIX}security |python -mjson.tool|grep GroupId| awk {'print $2'}| cut -c 2- | rev | cut -c 3- | rev`
   aws ec2 modify-instance-attribute --instance-id "$id" --groups "$secureid"
 }
 
