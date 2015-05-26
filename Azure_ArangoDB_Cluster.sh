@@ -326,6 +326,16 @@ AzureDestroyMachines() {
   echo "Destroying virtual network"
   azure network vnet delete "${PREFIX}vnet"
 
+  read -p "Delete directory: '$OUTPUT' ? [y/n]: " -n 1 -r
+    echo
+  if [[ $REPLY =~ ^[Yy]$ ]]
+    then
+      rm -r "$OUTPUT"
+      echo "Directory deleted. Finished."
+    else
+      echo "For a new cluster instance, please remove the directory or specifiy another output directory with -d '/my/directory'"
+  fi
+
   exit 0
 }
 
