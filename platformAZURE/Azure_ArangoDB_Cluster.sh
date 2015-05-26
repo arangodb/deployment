@@ -235,7 +235,7 @@ function createMachine () {
 function createEndpoint () {
   ok=0
   while [ "$ok" == "0" ] ; do
-    echo "opening port 8529 for $PREFIX$1"
+    echo "opening port 8529 on $PREFIX$1"
     azure vm endpoint create "$PREFIX$1" 8529 8529 >>/tmp/azure$1.log
     if [ $? -eq 0 ]; then
       ok=1
