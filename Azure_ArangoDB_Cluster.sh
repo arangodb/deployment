@@ -328,16 +328,6 @@ AzureDestroyMachines() {
 
   wait
 
-  read -p "Delete directory: '$OUTPUT' ? [y/n]: " -n 1 -r
-    echo
-  if [[ $REPLY =~ ^[Yy]$ ]]
-    then
-      rm -r "$OUTPUT"
-      echo "Directory deleted. Finished."
-    else
-      echo "For a new cluster instance, please remove the directory or specifiy another output directory with -d '/my/directory'"
-  fi
-
   exit 0
 }
 
@@ -397,6 +387,19 @@ PREFIX="arangodb-test-$$-"
 if test -e "$OUTPUT";  then
   if [ "$REMOVE" == "1" ] ; then
     AzureDestroyMachines
+
+    wait
+
+    read -p "Delete directory:for '$OUTPUT' ? [y/n]: " -n 1 -r
+      echo
+    if [[ $REPLY =~ ^[Yy]$ ]]
+      then
+        rm -r "$OUTPUT"
+        echo "Directory deleted. Finished."
+      else
+        echo "For a new cluster instance, please remove the directory or specifiy another output directory with -d '/my/directory'"
+    fi
+
     exit 0
   fi
 
