@@ -62,6 +62,8 @@ AzureDestroyMachines() {
   echo "Destroying virtual network"
   azure network vnet delete "${PREFIX}vnet"
 
+  wait
+
   read -p "Delete directory: '$OUTPUT' ? [y/n]: " -n 1 -r
     echo
   if [[ $REPLY =~ ^[Yy]$ ]]
