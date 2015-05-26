@@ -459,6 +459,9 @@ fi
 
 #check if ssh agent is running
 if [ -n "${SSH_AUTH_SOCK}" ]; then
+
+    eval `ssh-agent -s`
+    ssh-add
     echo "SSH-Agent is running."
 
     #check if key already added to ssh agent
@@ -469,7 +472,8 @@ if [ -n "${SSH_AUTH_SOCK}" ]; then
     fi
 
   else
-    echo "No SSH-Agent running. Skipping."
+    echo "No SSH-Agent running. Exiting"
+    exit 1
 
 fi
 
