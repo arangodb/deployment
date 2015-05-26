@@ -163,6 +163,7 @@ startArangoDBClusterWithDocker() {
          -v $DBSERVER_LOGS:/logs --net=host \
          --name=dbserver$PORT_DBSERVER ${DOCKER_IMAGE_NAME} \
           arangod --database.directory /data \
+          --frontend-version-check false \
           --cluster.agency-endpoint tcp://${SERVERS_INTERNAL_ARR[0]}:4001 \
           --cluster.my-address tcp://${SERVERS_INTERNAL_ARR[$i]}:$PORT_DBSERVER \
           --server.endpoint tcp://0.0.0.0:$PORT_DBSERVER \
