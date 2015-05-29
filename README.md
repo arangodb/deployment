@@ -16,7 +16,7 @@ There will be coming more supported platforms in the future. Feel free to contac
 
 #### Digital Ocean Deployment
 
-##### Create a cluster:
+#### Create a cluster:
 ```sh
 $ wget https://raw.githubusercontent.com/ArangoDB/deployment/publish/DigitalOcean_ArangoDB_Cluster.sh
 $ chmod +x DigitalOcean_ArangoDB_Cluster.sh
@@ -29,7 +29,7 @@ $ ./DigitalOcean_ArangoDB_Cluster.sh
 ./DigitalOcean_ArangoDB_Cluster.sh -r
 ```
 
-#### Google Compute Engine Deployment
+### Google Compute Engine Deployment
 
 To use the google bash script, you need the Google gcloud tool installed and configured. You can skip this part, if that already happened.
 
@@ -68,7 +68,7 @@ $ ./GoogleComputeEngine_ArangoDB_Cluster.sh
 $ ./GoogleComputeEngine_ArangoDB_Cluster.sh -r
 ```
 
-#### Amazon Web Services
+### Amazon Web Services
 
 The script needs the awscli installed and configured. You can skip this part if your awscli tool is already installed and fully configured. Otherwise please follow these steps:
 
@@ -101,7 +101,7 @@ $ ./AmazonWebServices_ArangoDB_Cluster.sh
 $ ./AmazonWebServices_ArangoDB_Cluster.sh -r
 ```
 
-#### Microsoft Azure
+### Microsoft Azure
 
 The script needs the azure-cli installed and configured. You can skip this part if azure-cli is already installed and fully configured. Otherwise please follow these steps:
 
