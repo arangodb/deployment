@@ -16,7 +16,7 @@ There will be coming more supported platforms in the future. Feel free to contac
 
 ### Digital Ocean
 
-#### Create a cluster:
+###### Create a cluster:
 ```sh
 $ wget https://raw.githubusercontent.com/ArangoDB/deployment/publish/DigitalOcean_ArangoDB_Cluster.sh
 $ chmod +x DigitalOcean_ArangoDB_Cluster.sh
@@ -24,7 +24,7 @@ $ export TOKEN="your_digital-ocean_token"
 $ ./DigitalOcean_ArangoDB_Cluster.sh 
 ```
 
-##### Remove existing cluster:
+###### Remove existing cluster:
 ```sh
 ./DigitalOcean_ArangoDB_Cluster.sh -r
 ```
@@ -56,14 +56,14 @@ Please use this command to list all available zones:
 $ gcloud compute zones list
 ```
 
-##### Create a cluster:
+###### Create a cluster:
 ```sh
 $ wget https://raw.githubusercontent.com/ArangoDB/deployment/publish/GoogleComputeEngine_ArangoDB_Cluster.sh
 $ chmod 755 GoogleComputeEngine_ArangoDB_Cluster.sh
 $ ./GoogleComputeEngine_ArangoDB_Cluster.sh
 ```
 
-##### Remove existing cluster:
+###### Remove existing cluster:
 ```sh
 $ ./GoogleComputeEngine_ArangoDB_Cluster.sh -r
 ```
@@ -89,14 +89,14 @@ You will be asked for:
  * Default region name
  * Default output format (optional)
 
-##### Create a cluster:
+###### Create a cluster:
 ```sh
 $ wget wget https://raw.githubusercontent.com/ArangoDB/deployment/publish/AmazonWebServices_ArangoDB_Cluster.sh
 $ chmod 755 AmazonWebServices_ArangoDB_Cluster.sh
 $ ./AmazonWebServices_ArangoDB_Cluster.sh
 ```
 
-##### Remove existing cluster:
+###### Remove existing cluster:
 ```sh
 $ ./AmazonWebServices_ArangoDB_Cluster.sh -r
 ```
@@ -135,14 +135,14 @@ b) Login via organizational account (if available)
 $ azure login
 ```
 
-##### Create a cluster:
+###### Create a cluster:
 ```sh
 $ wget https://raw.githubusercontent.com/ArangoDB/deployment/publish/Azure_ArangoDB_Cluster.sh
 $ chmod 755 Azure_ArangoDB_Cluster.sh
 $ ./Azure_ArangoDB_Cluster.sh
 ```
 
-##### Remove existing cluster:
+###### Remove existing cluster:
 ```sh
 $ ./Azure_ArangoDB_Cluster.sh -r
 ```
