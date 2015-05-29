@@ -1,21 +1,32 @@
 ![ArangoDB-Deployment](https://raw.githubusercontent.com/hkernbach/images/master/arangodb/deployment/aranogdb_deploy_img.png)
 
-# deployment
+# ArangoDB fast-deployment tools
+This collection of bash scripts deploys an ArangoDB Cluster on several cloud services platforms. 
 
-### DO (Digital Ocean)
+Get Started
+-----------
 
-Create a three-instance cluster:
+#### DO (Digital Ocean)
+
+Create a cluster:
 ```sh
-$ chmod +x create_do_machines.sh
-$ export TOKEN="your_token"
-$ ./create_do_machines.sh -n 3
+$ wget https://raw.githubusercontent.com/ArangoDB/deployment/publish/DigitalOcean_ArangoDB_Cluster.sh
+$ chmod +x DigitalOcean_ArangoDB_Cluster.sh
+$ export TOKEN="your_digital-ocean_token"
+$ ./DigitalOcean_ArangoDB_Cluster.sh 
 ```
 
-### GCE (Google Compute Engine)
+Remove existing cluster:
+```sh
+./DigitalOcean_ArangoDB_Cluster.sh -r
+```
+
+#### GCE (Google Compute Engine)
 For deployment at google computing engine cloud you need the gcloud Tool Guide:
   - https://cloud.google.com/sdk/gcloud/
 
 Create a three-instance cluster (example gce project id: cluster-0001):
 ```sh
-$ ./create_gce_machines.sh -p cluster-0001 -n 3
+$ wget https://raw.githubusercontent.com/ArangoDB/deployment/publish/GoogleComputeEngine_ArangoDB_Cluster.sh
+$ chmod 755 GoogleComputeEngine_ArangoDB_Cluster.sh
 ```
