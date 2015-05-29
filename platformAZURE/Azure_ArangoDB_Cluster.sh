@@ -62,6 +62,8 @@ AzureDestroyMachines() {
   echo "Destroying virtual network"
   azure network vnet delete "${PREFIX}vnet"
 
+  wait
+
   exit 0
 }
 
@@ -121,6 +123,19 @@ PREFIX="arangodb-test-$$-"
 if test -e "$OUTPUT";  then
   if [ "$REMOVE" == "1" ] ; then
     AzureDestroyMachines
+
+    wait
+
+    read -p "Delete directory:for '$OUTPUT' ? [y/n]: " -n 1 -r
+      echo
+    if [[ $REPLY =~ ^[Yy]$ ]]
+      then
+        rm -r "$OUTPUT"
+        echo "Directory deleted. Finished."
+      else
+        echo "For a new cluster instance, please remove the directory or specifiy another output directory with -d '/my/directory'"
+    fi
+
     exit 0
   fi
 
@@ -183,6 +198,9 @@ fi
 
 #check if ssh agent is running
 if [ -n "${SSH_AUTH_SOCK}" ]; then
+
+    eval `ssh-agent -s`
+    ssh-add
     echo "SSH-Agent is running."
 
     #check if key already added to ssh agent
@@ -193,7 +211,8 @@ if [ -n "${SSH_AUTH_SOCK}" ]; then
     fi
 
   else
-    echo "No SSH-Agent running. Skipping."
+    echo "No SSH-Agent running. Exiting"
+    exit 1
 
 fi
 
@@ -235,7 +254,7 @@ function createMachine () {
 function createEndpoint () {
   ok=0
   while [ "$ok" == "0" ] ; do
-    echo "opening port 8529 for $PREFIX$1"
+    echo "opening port 8529 on $PREFIX$1"
     azure vm endpoint create "$PREFIX$1" 8529 8529 >>/tmp/azure$1.log
     if [ $? -eq 0 ]; then
       ok=1
