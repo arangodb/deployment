@@ -7,10 +7,10 @@ Collection of bash scripts which deploy an ArangoDB Cluster on several cloud ser
 ## Get Started
 
 Here you'll find all information you need to easily start a complete arangodb cluster. Currently we're offering fast deploy on following cloud platforms: 
- * Digital Ocean
- * Google Compute Engine
- * Amazon Web Services
- * Microsoft Azure
+ * [Digital Ocean](#digital-ocean)
+ * [Google Compute Engine](#google-compute-engine)
+ * [Amazon Web Services](#amazon-web-services)
+ * [Microsoft Azure](#microsoft-azure)
  
 There will be coming more supported platforms in the future. Feel free to contact us if you have a special desire for a particular cloud service platform. In order to use the scripts, please follow the instructions listed below.
 
