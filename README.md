@@ -1,3 +1,5 @@
+![ArangoDB-Deployment](https://raw.githubusercontent.com/hkernbach/images/master/arangodb/deployment/aranogdb_deploy_img.png)
+
 # deployment
 
 ### DO (Digital Ocean)
