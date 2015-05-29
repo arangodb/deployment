@@ -167,7 +167,7 @@ Optional prerequisites The following environment variables are used:
 Please remember that some variables may slightly differ like e.g. the size parameter. Each cloud platform service has their own naming for them. Some scripts may offer more modification (use -h to display them).
 
 ## Some background information for the curious
-This script will use the azure-cli authentication for Azure to deploy a number of VM instances running CoreOS. If you do not already have one, it will first create a SSH keypair for you and deploy it to Azure and your ssh-agent. Once the machines are running, the script uses Docker images to start up all components of an ArangoDB cluster and link them to each other. In the end, it will print out access information.
+This script will use the clis authentication for each cloud service platform to deploy a number of VM instances running CoreOS. If you do not already have one, it will first create a SSH keypair for you and deploy it to your chosen cloud service platform and your ssh-agent. Once the machines are running, the script uses Docker images to start up all components of an ArangoDB cluster and link them to each other. In the end, it will print out access information.
 
 No installation of ArangoDB is needed neither on the VM instances nor on your machine. All deployment issues are taken care of by Docker. You can simply sit back and enjoy.
 
