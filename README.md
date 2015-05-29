@@ -1,7 +1,7 @@
 ![ArangoDB-Deployment](https://raw.githubusercontent.com/hkernbach/images/master/arangodb/deployment/aranogdb_deploy_img.png)
 
 # ArangoDB fast-deployment tools
-This collection of bash scripts deploys an ArangoDB Cluster on several cloud services platforms. 
+Collection of bash scripts which deploy an ArangoDB Cluster on several cloud services platforms. 
 
 Get Started
 -----------
