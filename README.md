@@ -1,11 +1,10 @@
 # ArangoDB fast-deployment tools
+
 Collection of bash scripts which deploy an ArangoDB Cluster on several cloud services platforms. 
------------
 
 ![ArangoDB-Deployment](https://raw.githubusercontent.com/hkernbach/images/master/arangodb/deployment/aranogdb_deploy_img.png)
 
 ##Get Started
------------
 
 Here you'll find all information you need to easily start a complete arangodb cluster. Currently we're offering fast deploy on following cloud platforms: 
  * Amazon Web Services
@@ -16,7 +15,6 @@ Here you'll find all information you need to easily start a complete arangodb cl
 There will be coming more supported platforms in the future. Feel free to contact us if you have a special desire for a particular cloud service platform. In order to use the scripts, please follow the instructions listed below.
 
 #### DO (Digital Ocean)
------------
 
 #####Create a cluster:
 ```sh
@@ -32,7 +30,6 @@ $ ./DigitalOcean_ArangoDB_Cluster.sh
 ```
 
 #### GCE (Google Compute Engine)
------------
 
 #####Prerequisites:
 
