@@ -147,6 +147,17 @@ $ ./Azure_ArangoDB_Cluster.sh
 $ ./Azure_ArangoDB_Cluster.sh -r
 ```
 
+##Some switches to configure a few things
+
+Use the -h parameter to get a help page.
+Optional prerequisites The following environment variables are used:
+
+ * SIZE : change the size/machine-type of the instance (e.g. -m t1.medium)
+ * NUMBER : change the count of machines to create (e.g. -n 3, the default is 3)
+ * OUTPUT : change the local output log folder (e.g. -d /my/directory)
+
+Please remember that some variables may slightly differ like e.g. the size parameter. Each cloud platform service has their own naming for them. Some scripts may offer more modification (use -h to display them).
+
 ## Some background information for the curious
 This script will use the azure-cli authentication for Azure to deploy a number of VM instances running CoreOS. If you do not already have one, it will first create a SSH keypair for you and deploy it to Azure and your ssh-agent. Once the machines are running, the script uses Docker images to start up all components of an ArangoDB cluster and link them to each other. In the end, it will print out access information.
 
