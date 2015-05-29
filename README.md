@@ -14,7 +14,7 @@ Here you'll find all information you need to easily start a complete arangodb cl
  
 There will be coming more supported platforms in the future. Feel free to contact us if you have a special desire for a particular cloud service platform. In order to use the scripts, please follow the instructions listed below.
 
-#### Digital Ocean Deployment
+### Digital Ocean
 
 #### Create a cluster:
 ```sh
@@ -29,7 +29,7 @@ $ ./DigitalOcean_ArangoDB_Cluster.sh
 ./DigitalOcean_ArangoDB_Cluster.sh -r
 ```
 
-### Google Compute Engine Deployment
+### Google Compute Engine 
 
 To use the google bash script, you need the Google gcloud tool installed and configured. You can skip this part, if that already happened.
 
