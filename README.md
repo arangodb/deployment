@@ -147,6 +147,14 @@ $ ./Azure_ArangoDB_Cluster.sh
 $ ./Azure_ArangoDB_Cluster.sh -r
 ```
 
+## Build From Source
+Optionally, you can build all deployment scripts from its source on Github. 
+```sh
+$ git clone git@github.com:arangodb/deployment.git
+$ cd deployment
+$ make
+```
+
 ##Some switches to configure a few things
 
 Use the -h parameter to get a help page.
