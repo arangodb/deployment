@@ -282,6 +282,16 @@ echo Internal IPs: ${SERVERS_INTERNAL_GCE[@]}
 echo External IPs: ${SERVERS_EXTERNAL_GCE[@]}
 echo IDs         : ${SERVERS_IDS_GCE[@]}
 
+# Prepare local SSD drives:
+echo Preparing local SSD driver...
+for ip in ${SERVERS_EXTERNAL_GCE[@]} ; do
+    echo Preparing local SSD drives for $ip...
+    scp -o"StrictHostKeyChecking no" platformGCE/prepareSSD.sh core@$ip:
+    scp -o"StrictHostKeyChecking no" platformGCE/mountSSD.sh core@$ip:
+    ssh -o"StrictHostKeyChecking no" core@$ip sudo ./prepareSSD.sh
+    ssh -o"StrictHostKeyChecking no" core@$ip sudo ./mountSSD.sh
+done
+
 SERVERS_INTERNAL="${SERVERS_INTERNAL_GCE[@]}"
 SERVERS_EXTERNAL="${SERVERS_EXTERNAL_GCE[@]}"
 SERVERS_IDS="${SERVERS_IDS_GCE[@]}"
