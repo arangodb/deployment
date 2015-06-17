@@ -316,6 +316,11 @@ export SSH_CMD="ssh"
 export SSH_SUFFIX="-i $DEFAULT_KEY_PATH -l $SSH_USER"
 export ZONE
 export PROJECT
+export DBSERVER_DATA=/data/dbserver
+export DBSERVER_LOGS=/data/dbserver_logs
+export COORDINATOR_DATA=/data/coordinator_data
+export COORDINATOR_LOGS=/data/coordinator_logs
+export AGENCY_DIR=/data/agency
 
 sleep 5
 
