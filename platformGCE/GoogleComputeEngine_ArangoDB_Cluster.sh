@@ -221,7 +221,8 @@ fi
 function createMachine () {
   echo "creating machine $PREFIX$1"
   INSTANCE=`gcloud compute instances create --image coreos --zone "$ZONE" \
-            --tags "${PREFIX}tag" --machine-type "$MACHINE_TYPE" "$PREFIX$1" | grep "^$PREFIX"`
+            --tags "${PREFIX}tag" --machine-type "$MACHINE_TYPE" "$PREFIX$1" \
+            --local-ssd device-name=local-ssd | grep "^$PREFIX"`
 
   a=`echo $INSTANCE | awk '{print $4}'`
   b=`echo $INSTANCE | awk '{print $5}'`
