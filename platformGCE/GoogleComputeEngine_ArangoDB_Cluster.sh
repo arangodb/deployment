@@ -283,11 +283,37 @@ echo External IPs: ${SERVERS_EXTERNAL_GCE[@]}
 echo IDs         : ${SERVERS_IDS_GCE[@]}
 
 # Prepare local SSD drives:
+
+# First we need two scripts:
+cat <<EOF >$OUTPUT/prepareSSD.sh
+#!/bin/bash
+parted -s /dev/disk/by-id/scsi-0Google_EphemeralDisk_local-ssd mklabel msdos
+parted -s /dev/disk/by-id/scsi-0Google_EphemeralDisk_local-ssd mkpart primary "linux-swap(v1)" "0%" "20%"
+parted -s /dev/disk/by-id/scsi-0Google_EphemeralDisk_local-ssd mkpart primary "ext4" "20%" "100%"
+sleep 3
+mkswap /dev/disk/by-id/scsi-0Google_EphemeralDisk_local-ssd-part1
+mkfs -t ext4 -F -F /dev/disk/by-id/scsi-0Google_EphemeralDisk_local-ssd-part2
+EOF
+chmod 755 $OUTPUT/prepareSSD.sh
+
+cat <<EOF >$OUTPUT/mountSSD.sh
+#!/bin/bash
+swapon /dev/disk/by-id/scsi-0Google_EphemeralDisk_local-ssd-part1
+if [ ! -d /data ] ; then
+    mkdir /data
+fi
+mount /dev/disk/by-id/scsi-0Google_EphemeralDisk_local-ssd-part2 /data -t ext4
+chown core.core /data
+echo never > /sys/kernel/mm/transparent_hugepage/enabled
+echo never > /sys/kernel/mm/transparent_hugepage/defrag
+EOF
+chmod 755 $OUTPUT/mountSSD.sh
+
 echo Preparing local SSD driver...
 for ip in ${SERVERS_EXTERNAL_GCE[@]} ; do
     echo Preparing local SSD drives for $ip...
-    scp -o"StrictHostKeyChecking no" platformGCE/prepareSSD.sh core@$ip:
-    scp -o"StrictHostKeyChecking no" platformGCE/mountSSD.sh core@$ip:
+    scp -o"StrictHostKeyChecking no" $OUTPUT/prepareSSD.sh core@$ip:
+    scp -o"StrictHostKeyChecking no" $OUTPUT/mountSSD.sh core@$ip:
     ssh -o"StrictHostKeyChecking no" core@$ip sudo ./prepareSSD.sh
     ssh -o"StrictHostKeyChecking no" core@$ip sudo ./mountSSD.sh
 done
