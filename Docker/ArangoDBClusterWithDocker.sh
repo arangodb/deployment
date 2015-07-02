@@ -168,6 +168,8 @@ startArangoDBClusterWithDocker() {
           --server.endpoint tcp://0.0.0.0:$PORT_DBSERVER \
           --cluster.my-local-info dbserver:${SERVERS_INTERNAL_ARR[$i]}:$PORT_DBSERVER \
           --log.file /logs/$PORT_DBSERVER.log \
+          --dispatcher.report-interval 15 \
+          --server.foxx-queues false \
           $DBSERVER_ARGS \
           >/dev/null
     }
@@ -188,6 +190,8 @@ startArangoDBClusterWithDocker() {
            --cluster.my-local-info \
                      coordinator:${SERVERS_INTERNAL_ARR[$i]}:$PORT_COORDINATOR \
            --log.file /logs/$PORT_COORDINATOR.log \
+           --dispatcher.report-interval 15 \
+           --server.foxx-queues false \
            $COORDINATOR_ARGS \
            >/dev/null
     }
