@@ -18,7 +18,8 @@
 #                      quotes [default: "-oStrictHostKeyChecking no"]
 #   SSH_USER         : user name on remote machine [default "core"]
 #   SSH_SUFFIX       : suffix for ssh command [default ""].
-#   NRDBSERVERS      : is always set to the length of SERVERS_EXTERNAL
+#   NRDBSERVERS      : is always set to the length of SERVERS_EXTERNAL if
+#                      not specified
 #   NRCOORDINATORS   : default: $NRDBSERVERS, can be less, at least 1
 #   PORT_DBSERVER    : default: 8629
 #   PORT_COORDINATOR : default: 8529
@@ -73,10 +74,12 @@ startArangoDBClusterWithDocker() {
     fi
     echo SERVERS_INTERNAL: ${SERVERS_INTERNAL_ARR[*]}
 
-    NRDBSERVERS=${#SERVERS_EXTERNAL_ARR[*]}
+    if [ -z "$NRDBSERVERS" ] ; then
+        NRDBSERVERS=${#SERVERS_EXTERNAL_ARR[*]}
+    fi
     LASTDBSERVER=`expr $NRDBSERVERS - 1`
-
     echo Number of DBServers: $NRDBSERVERS
+
     if [ -z "$NRCOORDINATORS" ] ; then
         NRCOORDINATORS=$NRDBSERVERS
     fi
@@ -108,6 +111,22 @@ startArangoDBClusterWithDocker() {
     fi
     echo PORT_COORDINATOR=$PORT_COORDINATOR
 
+    i=$NRDBSERVERS
+    if [ $i -ge ${#SERVERS_INTERNAL_ARR[*]} ] ; then
+        i=0
+    fi
+    COORDINATOR_MACHINES="$i"
+    FIRST_COORDINATOR=$i
+    for j in `seq 1 $LASTCOORDINATOR` ; do
+        i=`expr $i + 1`
+        if [ $i -ge ${#SERVERS_INTERNAL_ARR[*]} ] ; then
+            i=0
+        fi
+        COORDINATOR_MACHINES="$COORDINATOR_MACHINES $i"
+    done
+    echo COORDINATOR_MACHINES:$COORDINATOR_MACHINES
+    echo FIRST_COORDINATOR: $FIRST_COORDINATOR
+
     if [ -z "$DBSERVER_DATA" ] ; then
       DBSERVER_DATA=/home/$SSH_USER/dbserver
     fi
@@ -138,7 +157,7 @@ startArangoDBClusterWithDocker() {
     for i in `seq 0 $LASTDBSERVER` ; do
       $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[$i]} $SSH_SUFFIX mkdir $DBSERVER_DATA $DBSERVER_LOGS >/dev/null 2>&1 &
     done
-    for i in `seq 0 $LASTCOORDINATOR` ; do
+    for i in $COORDINATOR_MACHINES ; do
       $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[$i]} $SSH_SUFFIX mkdir $COORDINATOR_DATA $COORDINATOR_LOGS >/dev/null 2>&1 &
     done
 
@@ -170,6 +189,9 @@ startArangoDBClusterWithDocker() {
           --log.file /logs/$PORT_DBSERVER.log \
           --dispatcher.report-interval 15 \
           --server.foxx-queues false \
+          --server.disable-statistics true \
+           --scheduler.threads 2 \
+           --server.threads 4 \
           $DBSERVER_ARGS \
           >/dev/null
     }
@@ -192,6 +214,9 @@ startArangoDBClusterWithDocker() {
            --log.file /logs/$PORT_COORDINATOR.log \
            --dispatcher.report-interval 15 \
            --server.foxx-queues false \
+           --server.disable-statistics true \
+           --scheduler.threads 3 \
+           --server.threads 40 \
            $COORDINATOR_ARGS \
            >/dev/null
     }
@@ -202,7 +227,7 @@ startArangoDBClusterWithDocker() {
 
     wait
 
-    for i in `seq 0 $LASTCOORDINATOR` ; do
+    for i in $COORDINATOR_MACHINES ; do
         start_coordinator $i &
     done
 
@@ -228,20 +253,20 @@ startArangoDBClusterWithDocker() {
     #    testServer ${SERVERS_EXTERNAL_ARR[$i]}:$PORT_DBSERVER
     #done
 
-    for i in `seq 0 $LASTCOORDINATOR` ; do
+    for i in $COORDINATOR_MACHINES ; do
         testServer ${SERVERS_EXTERNAL_ARR[$i]}:$PORT_COORDINATOR
     done
 
     echo Bootstrapping DBServers...
-    curl -s -X POST "http://${SERVERS_EXTERNAL_ARR[0]}:$PORT_COORDINATOR/_admin/cluster/bootstrapDbServers" \
+    curl -s -X POST "http://${SERVERS_EXTERNAL_ARR[$FIRST_COORDINATOR]}:$PORT_COORDINATOR/_admin/cluster/bootstrapDbServers" \
          -d '{"isRelaunch":false}' >/dev/null 2>&1
 
     echo Running DB upgrade on cluster...
-    curl -s -X POST "http://${SERVERS_EXTERNAL_ARR[0]}:$PORT_COORDINATOR/_admin/cluster/upgradeClusterDatabase" \
+    curl -s -X POST "http://${SERVERS_EXTERNAL_ARR[$FIRST_COORDINATOR]}:$PORT_COORDINATOR/_admin/cluster/upgradeClusterDatabase" \
          -d '{"isRelaunch":false}' >/dev/null 2>&1
 
     echo Bootstrapping Coordinators...
-    for i in `seq 0 $LASTCOORDINATOR` ; do
+    for i in $COORDINATOR_MACHINES ; do
         echo Doing ${SERVERS_EXTERNAL_ARR[$i]}:$PORT_COORDINATOR
         curl -s -X POST "http://${SERVERS_EXTERNAL_ARR[$i]}:$PORT_COORDINATOR/_admin/cluster/bootstrapCoordinator" \
              -d '{"isRelaunch":false}' >/dev/null 2>&1 &
@@ -250,17 +275,17 @@ startArangoDBClusterWithDocker() {
     wait
 
     echo ""
-    echo "================================================================================================"
+    echo "=============================================================================="
     echo "Done, your cluster is ready."
-    echo "================================================================================================"
+    echo "=============================================================================="
     echo ""
     echo "Frontends available at:"
-    for i in `seq 0 $LASTCOORDINATOR` ; do
+    for i in $COORDINATOR_MACHINES ; do
         echo "   http://${SERVERS_EXTERNAL_ARR[$i]}:$PORT_COORDINATOR"
     done
     echo ""
     echo "Access with docker, using arangosh:"
-    for i in `seq 0 $LASTCOORDINATOR` ; do
+    for i in $COORDINATOR_MACHINES ; do
         echo "   docker run -it --rm --net=host ${DOCKER_IMAGE_NAME} arangosh --server.endpoint tcp://${SERVERS_EXTERNAL_ARR[$i]}:$PORT_COORDINATOR"
     done
     echo ""
