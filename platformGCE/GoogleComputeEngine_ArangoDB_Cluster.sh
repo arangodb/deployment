@@ -220,16 +220,10 @@ fi
 
 function createMachine () {
   echo "creating machine $PREFIX$1"
-  if [ $1 -gt $LASTSSDMACHINE ] ; then
-      INSTANCE=`gcloud compute instances create --image coreos --zone "$ZONE" \
-                --tags "${PREFIX}tag" --machine-type "$MACHINE_TYPE" \
-                "$PREFIX$1" | grep "^$PREFIX"`
-  else
-      INSTANCE=`gcloud compute instances create --image coreos --zone "$ZONE" \
-                --tags "${PREFIX}tag" --machine-type "$MACHINE_TYPE" \
-                "$PREFIX$1" --local-ssd device-name=local-ssd \
-                | grep "^$PREFIX"`
-  fi
+  INSTANCE=`gcloud compute instances create --image coreos --zone "$ZONE" \
+            --tags "${PREFIX}tag" --machine-type "$MACHINE_TYPE" \
+            "$PREFIX$1" --local-ssd device-name=local-ssd \
+            | grep "^$PREFIX"`
 
   a=`echo $INSTANCE | awk '{print $4}'`
   b=`echo $INSTANCE | awk '{print $5}'`
@@ -245,14 +239,6 @@ declare -a SERVERS_IDS_GCE
 
 SSH_USER="core"
 SSH_CMD="ssh"
-
-# If $NRDBSERVERS is set, we only create SSDs for the first so many machines,
-# the coordinators do not need SSDs:
-if [ -z "$NRDBSERVERS" ] ; then
-    LASTSSDMACHINE=${#SERVERS_INTERNAL_GCE[@]}
-else
-    LASTSSDMACHINE=$NRDBSERVERS
-fi
 
 for i in `seq $NUMBER`; do
   createMachine $i &
@@ -325,8 +311,7 @@ EOF
 chmod 755 $OUTPUT/mountSSD.sh
 
 echo Preparing local SSD driver...
-for i in `seq 0 $LASTSSDMACHINE` ; do
-    ip=${SERVERS_EXTERNAL_GCE[$i]}
+for ip in ${SERVERS_EXTERNAL_GCE[@]} ; do
     echo Preparing local SSD drives for $ip...
     scp -o"StrictHostKeyChecking no" $OUTPUT/prepareSSD.sh core@$ip:
     scp -o"StrictHostKeyChecking no" $OUTPUT/mountSSD.sh core@$ip:
