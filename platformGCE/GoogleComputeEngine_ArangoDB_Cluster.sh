@@ -8,15 +8,20 @@
 #   PROJECT : project id of your designated project (e.g. -p "project_id");
 #
 # Optional prerequisites:
-#   ZONE    : size of the server (e.g. -z europe-west1-b)
-#   SIZE    : size/machine-type of the instance (e.g. -m n1-standard-2)
-#   NUMBER  : count of machines to create (e.g. -n 3)
-#   OUTPUT  : local output log folder (e.g. -d /my/directory)
+#   ZONE           : size of the server (e.g. -z europe-west1-b)
+#   MACHINE_TYPE   : size/machine-type of the instance (e.g. -m n1-standard-4)
+#   MACHINE_TYPE_C : size/machine-type of the coordinator instances
+#                    (e.g. -c n1-highcpu.8)
+#   NUMBER         : count of machines to create (e.g. -n 3)
+#   OUTPUT         : local output log folder (e.g. -d /my/directory)
+#   NRDBSERVERS    : number of DBservers, defaults to $NUMBER
+#   NRCOORDINATORS : number of coordinators, defaults to $NUMBER
 
 trap "kill 0" SIGINT
 
 ZONE="europe-west1-b"
-MACHINE_TYPE="n1-standard-2"
+MACHINE_TYPE="n1-standard-4"
+MACHINE_TYPE_C="n1-highcpu-8"
 NUMBER="3"
 OUTPUT="gce"
 PROJECT=""
@@ -71,7 +76,7 @@ GoogleComputeEngineDestroyMachines() {
 
 REMOVE=0
 
-while getopts ":z:m:n:d:p:s:hr" opt; do
+while getopts ":z:m:c:n:d:p:s:hr" opt; do
   case $opt in
     h)
        cat <<EOT
@@ -85,10 +90,14 @@ The following environment variables are used:
   PROJECT : project id of your designated project (e.g. -p "project_id");
 
 Optional prerequisites:
-  ZONE    : size of the server (e.g. -z europe-west1-b)
-  SIZE    : size/machine-type of the instance (e.g. -m n1-standard-2)
-  NUMBER  : count of machines to create (e.g. -n 3)
-  OUTPUT  : local output log folder (e.g. -d /my/directory)
+  ZONE           : size of the server (e.g. -z europe-west1-b)
+  MACHINE_TYPE   : size/machine-type of the instance (e.g. -m n1-standard-4)
+  MACHINE_TYPE_C : size/machine-type of the coordinator instances
+                   (e.g. -c n1-highcpu-8)
+  NUMBER         : count of machines to create (e.g. -n 3)
+  OUTPUT         : local output log folder (e.g. -d /my/directory)
+  NRDBSERVERS    : number of DBservers (defaults to $NUMBER)
+  NRCOORDINATORS : number of coordinators (defaults to $NUMBER)
 EOT
       exit 0
       ;;
@@ -97,6 +106,9 @@ EOT
       ;;
     m)
       MACHINE_TYPE="$OPTARG"
+      ;;
+    c)
+      MACHINE_TYPE_C="$OPTARG"
       ;;
     n)
       NUMBER="$OPTARG"
@@ -178,9 +190,19 @@ if [ "$REMOVE" == "1" ] ; then
   exit 1
 fi
 
+if [ -z "$NRDBSERVERS" ] ; then
+    export NRDBSERVERS=$NUMBER
+fi
+if [ -z "$NRCOORDINATORS" ] ; then
+    export NRCOORDINATORS=$NUMBER
+fi
+
 echo "MACHINE_TYPE: $MACHINE_TYPE"
+echo "MACHINE_TYPE_C: $MACHINE_TYPE_C"
 echo "NUMBER OF MACHINES: $NUMBER"
 echo "MACHINE PREFIX: $PREFIX"
+echo "NRDBSERVERS: $NRDBSERVERS"
+echo "NRCOORDINATORS: $NRCOORDINATORS"
 
 mkdir -p "$OUTPUT/temp"
 
@@ -220,10 +242,16 @@ fi
 
 function createMachine () {
   echo "creating machine $PREFIX$1"
-  INSTANCE=`gcloud compute instances create --image coreos --zone "$ZONE" \
-            --tags "${PREFIX}tag" --machine-type "$MACHINE_TYPE" \
-            "$PREFIX$1" --local-ssd device-name=local-ssd \
-            | grep "^$PREFIX"`
+  if [ $1 -le $NRDBSERVERS ] ; then
+      INSTANCE=`gcloud compute instances create --image coreos --zone "$ZONE" \
+                --tags "${PREFIX}tag" --machine-type "$MACHINE_TYPE" \
+                "$PREFIX$1" --local-ssd device-name=local-ssd \
+                | grep "^$PREFIX"`
+  else
+      INSTANCE=`gcloud compute instances create --image coreos --zone "$ZONE" \
+                --tags "${PREFIX}tag" --machine-type "$MACHINE_TYPE_C" \
+                "$PREFIX$1" | grep "^$PREFIX"`
+  fi
 
   a=`echo $INSTANCE | awk '{print $4}'`
   b=`echo $INSTANCE | awk '{print $5}'`
@@ -311,7 +339,9 @@ EOF
 chmod 755 $OUTPUT/mountSSD.sh
 
 echo Preparing local SSD driver...
-for ip in ${SERVERS_EXTERNAL_GCE[@]} ; do
+LASTDBSERVER=`expr $NRDBSERVERS - 1`
+for i in `seq 0 $LASTDBSERVER` ; do
+    ip=${SERVERS_EXTERNAL_GCE[$i]}
     echo Preparing local SSD drives for $ip...
     scp -o"StrictHostKeyChecking no" $OUTPUT/prepareSSD.sh core@$ip:
     scp -o"StrictHostKeyChecking no" $OUTPUT/mountSSD.sh core@$ip:
