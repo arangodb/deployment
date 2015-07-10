@@ -227,8 +227,8 @@ startArangoDBClusterWithDocker() {
                --dispatcher.report-interval 15 \
                --server.foxx-queues false \
                --server.disable-statistics true \
-               --scheduler.threads 4 \
-               --server.threads 60 \
+               --scheduler.threads 3 \
+               --server.threads 40 \
                $COORDINATOR_ARGS \
                >/dev/null
         do
