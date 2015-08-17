@@ -231,7 +231,7 @@ if [ -n "${SSH_AUTH_SOCK}" ]; then
 fi
 
 #add firewall rule for arangodb-test tag
-gcloud compute firewall-rules create "${PREFIX}firewall" --allow tcp:8529 --target-tags "${PREFIX}tag"
+gcloud compute firewall-rules create "${PREFIX}firewall" --allow tcp:8529,tcp:8629,tcp:8630 --target-tags "${PREFIX}tag"
 
 if [ $? -eq 0 ]; then
   echo

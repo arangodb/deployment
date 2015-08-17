@@ -2,7 +2,7 @@
 # This script is provided as-is, no warrenty is provided or implied.
 # The author is NOT responsible for any damages or data loss that may occur through the use of this script.
 #
-# This function starts a ArangoDB cluster by just using docker
+# This function starts an ArangoDB cluster by just using docker
 #
 # Prerequisites:
 # The following environment variables are used:
@@ -23,13 +23,20 @@
 #   NRCOORDINATORS   : default: $NRDBSERVERS, can be less, at least 1
 #   PORT_DBSERVER    : default: 8629
 #   PORT_COORDINATOR : default: 8529
+#   PORT_REPLICA     : default: 8630
 #   DBSERVER_DATA    : default: "/home/$SSH_USER/dbserver"
 #   COORDINATOR_DATA : default: "/home/$SSH_USER/coordinator"
 #   DBSERVER_LOGS    : default: "/home/$SSH_USER/dbserver_logs"
 #   COORDINATOR_LOGS : default: "/home/$SSH_USER/coordinator_logs"
+#   REPLICA_DATA     : default: "/home/$SSH_USER/replica"
+#   REPLICA_LOGS     : default: "/home/$SSH_USER/replica_logs"
 #   AGENCY_DIR       : default: /home/$SSH_USER/agency"
 #   DBSERVER_ARGS    : default: ""
 #   COORDINATOR_ARGS : default: ""
+#   REPLICA_ARGS     : default: ""
+#   REPLICAS         : default : "", if non-empty, one asynchronous replica
+#                      is started for each DBserver, it resides on the "next"
+#                      machine
 
 # There will be one DBserver on each machine and at most one coordinator.
 # There will be one agency running on the first machine.
@@ -41,7 +48,7 @@
 
 startArangoDBClusterWithDocker() {
 
-    DOCKER_IMAGE_NAME=neunhoef/arangodb_cluster:latest
+    DOCKER_IMAGE_NAME=neunhoef/arangodb_cluster:2.6.dev-2.5
 
     # Two docker images are needed: 
     #  microbox/etcd for the agency and
@@ -111,6 +118,11 @@ startArangoDBClusterWithDocker() {
     fi
     echo PORT_COORDINATOR=$PORT_COORDINATOR
 
+    if [ -z "$PORT_REPLICA" ] ; then
+      PORT_REPLICA=8630
+    fi
+    echo PORT_REPLICA=$PORT_REPLICA
+
     i=$NRDBSERVERS
     if [ $i -ge ${#SERVERS_INTERNAL_ARR[*]} ] ; then
         i=0
@@ -137,6 +149,16 @@ startArangoDBClusterWithDocker() {
     fi
     echo DBSERVER_LOGS=$DBSERVER_LOGS
 
+    if [ -z "$REPLICA_DATA" ] ; then
+      REPLICA_DATA=/home/$SSH_USER/replica
+    fi
+    echo REPLICA_DATA=$REPLICA_DATA
+
+    if [ -z "$REPLICA_LOGS" ] ; then
+      REPLICA_LOGS=/home/$SSH_USER/replica_logs
+    fi
+    echo REPLICA_LOGS=$REPLICA_LOGS
+
     if [ -z "$AGENCY_DIR" ] ; then
       AGENCY_DIR=/home/$SSH_USER/agency
     fi
@@ -155,11 +177,20 @@ startArangoDBClusterWithDocker() {
     echo Creating directories on servers. This may take some time. Please wait.
     $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[0]} $SSH_SUFFIX mkdir $AGENCY_DIR >/dev/null 2>&1 &
     for i in `seq 0 $LASTDBSERVER` ; do
-      $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[$i]} $SSH_SUFFIX mkdir $DBSERVER_DATA $DBSERVER_LOGS >/dev/null 2>&1 &
+        $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[$i]} $SSH_SUFFIX mkdir $DBSERVER_DATA $DBSERVER_LOGS >/dev/null 2>&1 &
     done
     for i in $COORDINATOR_MACHINES ; do
-      $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[$i]} $SSH_SUFFIX mkdir $COORDINATOR_DATA $COORDINATOR_LOGS >/dev/null 2>&1 &
+        $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[$i]} $SSH_SUFFIX mkdir $COORDINATOR_DATA $COORDINATOR_LOGS >/dev/null 2>&1 &
     done
+    if [ ! -z "$REPLICAS" ] ; then
+        for i in `seq 0 $LASTDBSERVER` ; do
+            j=`expr $i + 1`
+            if [ $j -gt $LASTDBSERVER ] ; then
+                j=0
+            fi
+            $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[$j]} $SSH_SUFFIX mkdir $REPLICA_DATA $REPLICA_LOGS >/dev/null 2>&1 &
+        done
+    fi
 
     wait
 
@@ -199,8 +230,8 @@ startArangoDBClusterWithDocker() {
               --dispatcher.report-interval 15 \
               --server.foxx-queues false \
               --server.disable-statistics true \
-              --scheduler.threads 1 \
-              --server.threads 3 \
+              --scheduler.threads 3 \
+              --server.threads 5 \
               $DBSERVER_ARGS \
               >/dev/null
         do
@@ -227,7 +258,7 @@ startArangoDBClusterWithDocker() {
                --dispatcher.report-interval 15 \
                --server.foxx-queues false \
                --server.disable-statistics true \
-               --scheduler.threads 3 \
+               --scheduler.threads 4 \
                --server.threads 40 \
                $COORDINATOR_ARGS \
                >/dev/null
@@ -288,6 +319,60 @@ startArangoDBClusterWithDocker() {
     done
 
     wait
+
+    if [ ! -z "$REPLICAS" ] ; then
+        start_replica () {
+            i=$1
+            j=`expr $i + 1`
+            if [ $j -gt $LASTDBSERVER ] ; then
+                j=0
+            fi
+            echo Starting asynchronous replica for
+            echo "  ${SERVERS_EXTERNAL_ARR[$i]}:$PORT_DBSERVER on ${SERVERS_EXTERNAL_ARR[$j]}:$PORT_REPLICA"
+
+            until $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[$j]} $SSH_SUFFIX \
+                docker run --detach=true -v $REPLICA_DATA:/data \
+                 -v $REPLICA_LOGS:/logs --net=host \
+                 --name=replica$PORT_REPLICA ${DOCKER_IMAGE_NAME} \
+                  arangod --database.directory /data \
+                  --frontend-version-check false \
+                  --server.endpoint tcp://0.0.0.0:$PORT_REPLICA \
+                  --log.file /logs/$PORT_REPLICA.log \
+                  --dispatcher.report-interval 15 \
+                  --server.foxx-queues false \
+                  --server.disable-statistics true \
+                  --scheduler.threads 1 \
+                  --server.threads 2 \
+                  $REPLICA_ARGS \
+                  >/dev/null
+            do
+                echo "Error in remote docker run, retrying..."
+            done
+        }
+
+        for i in `seq 0 $LASTDBSERVER` ; do
+            start_replica $i &
+        done
+
+        echo Waiting 10 seconds till replicas are up and running...
+        sleep 10
+
+        for i in `seq 0 $LASTDBSERVER` ; do
+            j=`expr $i + 1`
+            if [ $j -gt $LASTDBSERVER ] ; then
+                j=0
+            fi
+            echo Attaching replica on $j for $i ...
+            curl -s -X PUT "http://${SERVERS_EXTERNAL_ARR[$j]}:$PORT_REPLICA/_api/replication/applier-config" -d '{"endpoint":"tcp://'${SERVERS_INTERNAL_ARR[$i]}:$PORT_DBSERVER'","database":"_system","includeSystem":false}' --dump -
+            # >/dev/null 2>&1
+            TICK=`curl -X PUT "http://${SERVERS_EXTERNAL_ARR[$j]}:$PORT_REPLICA/_api/replication/sync" -d '{"endpoint":"tcp://'${SERVERS_INTERNAL_ARR[$i]}:$PORT_DBSERVER'"}' | sed -e 's/^.*lastLogTick":"\([0-9]*\)"}.*$/\1/'`
+            # >/dev/null 2>&1
+            curl -X PUT "http://${SERVERS_EXTERNAL_ARR[$j]}:$PORT_REPLICA/_api/replication/applier-start?from=$TICK" --dump - && echo
+            # >/dev/null 2>&1
+        done
+    wait
+        
+    fi
 
     echo ""
     echo "=============================================================================="
