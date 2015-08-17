@@ -1,4 +1,4 @@
-all: DigitalOcean_ArangoDB_Cluster.sh GoogleComputeEngine_ArangoDB_Cluster.sh Azure_ArangoDB_Cluster.sh AmazonWebServices_ArangoDB_Cluster.sh
+all: DigitalOcean_ArangoDB_Cluster.sh GoogleComputeEngine_ArangoDB_Cluster.sh Azure_ArangoDB_Cluster.sh AmazonWebServices_ArangoDB_Cluster.sh GoogleComputeEngine_Mesos_Cluster.sh
 
 DigitalOcean_ArangoDB_Cluster.sh: Makefile platformDO/DigitalOcean_ArangoDB_Cluster.sh Docker/ArangoDBClusterWithDocker.sh
 	echo "#!/bin/bash" > $@
@@ -24,5 +24,11 @@ AmazonWebServices_ArangoDB_Cluster.sh: Makefile platformAWS/AmazonWebServices_Ar
 	cat platformAWS/AmazonWebServices_ArangoDB_Cluster.sh >> $@
 	chmod 755 $@
 
+GoogleComputeEngine_Mesos_Cluster.sh: Makefile platformGCE/GoogleComputeEngine_Mesos_Cluster.sh Docker/MesosClusterWithDocker.sh
+	echo "#!/bin/bash" > $@
+	cat Docker/MesosClusterWithDocker.sh >> $@
+	cat platformGCE/GoogleComputeEngine_Mesos_Cluster.sh >> $@
+	chmod 755 $@
+
 clean:
-	rm -f DigitalOcean_ArangoDB_Cluster.sh GoogleComputeEngine_ArangoDB_Cluster.sh Azure_ArangoDB_Cluster.sh AmazonWebServices_ArangoDB_Cluster.sh
+	rm -f DigitalOcean_ArangoDB_Cluster.sh GoogleComputeEngine_ArangoDB_Cluster.sh Azure_ArangoDB_Cluster.sh AmazonWebServices_ArangoDB_Cluster.sh GoogleComputeEngine_Mesos_Cluster
