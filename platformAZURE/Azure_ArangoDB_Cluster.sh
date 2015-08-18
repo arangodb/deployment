@@ -338,6 +338,11 @@ echo Internal IPs: ${SERVERS_INTERNAL_AZURE[@]}
 echo External IPs: ${SERVERS_EXTERNAL_AZURE[@]}
 echo IDs         : ${SERVERS_IDS_AZURE[@]}
 
+echo Remove host key entries in ~/.ssh/known_hosts...
+for ip in ${SERVERS_EXTERNAL_AZURE[@]} ; do
+  ssh-keygen -f ~/.ssh/known_hosts -R $ip
+done
+
 SERVERS_INTERNAL="${SERVERS_INTERNAL_AZURE[@]}"
 SERVERS_EXTERNAL="${SERVERS_EXTERNAL_AZURE[@]}"
 SERVERS_IDS="${SERVERS_IDS_AZURE[@]}"

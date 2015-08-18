@@ -42,9 +42,9 @@
 
 startMesosClusterWithDocker() {
 
-    ZOOKEEPER_IMAGE_NAME=garland/zookeeper
-    MESOS_IMAGE_NAME=garland/mesosphere-docker-mesos-master
-    MARATHON_IMAGE_NAME=garland/mesosphere-docker-mesos-master
+    ZOOKEEPER_IMAGE_NAME=neunhoef/zookeeper
+    MESOS_IMAGE_NAME=neunhoef/mesosphere-docker-mesos-master
+    MARATHON_IMAGE_NAME=neunhoef/mesosphere-docker-marathon
 
     # Three docker images are needed: 
     #  ${ZOOKEEPER_IMAGE_NAME} for zookeeper, and
@@ -68,7 +68,9 @@ startMesosClusterWithDocker() {
     declare -a SERVERS_EXTERNAL_ARR=($SERVERS_EXTERNAL)
     echo SERVERS_EXTERNAL: ${SERVERS_EXTERNAL_ARR[*]}
     NRSERVERS=${#SERVERS_EXTERNAL_ARR[*]}
+    echo NRSERVERS=${NRSERVERS}
     LASTSERVER=`expr $NRSERVERS - 1`
+    echo LASTSERVER=${LASTSERVER}
 
     if [ -z "$SERVERS_INTERNAL" ] ; then
       declare -a SERVERS_INTERNAL_ARR=(${SERVERS_EXTERNAL_ARR[*]})
@@ -152,14 +154,15 @@ startMesosClusterWithDocker() {
 
     sleep 1
     echo Initializing Mesos master...
-    until $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[0]} $SSH_SUFFIX "docker run --name=mesos_master --net="host" -p 5050:5050 -v $MASTER_DATA:/data -v $MASTER_LOGS:/logs -e "MESOS_HOSTNAME=${SERVERS_INTERNAL_ARR[0]}" -e "MESOS_IP=${SERVERS_INTERNAL_ARR[0]}" -e "MESOS_ZK=zk://${SERVERS_INTERNAL_ARR[0]}:2181/mesos" -e "MESOS_PORT=5050" -e "MESOS_LOG_DIR=/logs" -e "MESOS_QUORUM=1" -e "MESOS_REGISTRY=in_memory" -e "MESOS_WORK_DIR=/data" --detach=true ${MESOS_IMAGE_NAME} $MASTER_ARGS > /home/$SSH_USER/mesos_master.log"
+    until $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[0]} $SSH_SUFFIX "docker run --name=mesos_master --net="host" -p 5050:5050 -v $MASTER_DATA:/data -v $MASTER_LOGS:/logs -e "MESOS_HOSTNAME=${SERVERS_INTERNAL_ARR[0]}" -e "MESOS_IP=${SERVERS_INTERNAL_ARR[0]}" -e "MESOS_ZK=zk://${SERVERS_INTERNAL_ARR[0]}:2181/mesos" -e "MESOS_PORT=5050" -e "MESOS_WORK_DIR=/data" -e "MESOS_LOG_DIR=/logs" -e "MESOS_QUORUM=1" -e "MESOS_REGISTRY=in_memory" -e "MESOS_ROLES=arangodb" --detach=true ${MESOS_IMAGE_NAME} $MASTER_ARGS > /home/$SSH_USER/mesos_master.log"
     do
         echo "Error in remote docker run, retrying..."
     done
+    # FIXME: use registry "replicated_log" eventually (or now?)
 
     sleep 1
     echo Initializing Marathon... 
-    until $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[0]} $SSH_SUFFIX "docker run --name=marathon -p 8080:8080 --detach=true -v $MARATHON_DATA:/data -v $MARATHON_LOGS:/logs ${MARATHON_IMAGE_NAME} $MARATHON_ARGS > /home/$SSH_USER/mesos_master.log"
+    until $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[0]} $SSH_SUFFIX "docker run --name=marathon -p 8080:8080 --detach=true -v $MARATHON_DATA:/data -v $MARATHON_LOGS:/logs ${MARATHON_IMAGE_NAME} --master zk://${SERVERS_INTERNAL_ARR[0]}:2181/mesos --zk zk://${SERVERS_INTERNAL_ARR[0]}:2181/marathon $MARATHON_ARGS > /home/$SSH_USER/mesos_master.log"
     do
         echo "Error in remote docker run, retrying..."
     done
@@ -169,7 +172,7 @@ startMesosClusterWithDocker() {
         echo Starting Mesos slave on ${SERVERS_EXTERNAL_ARR[$i]}:
 
         until $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[$i]} $SSH_SUFFIX \
-            "docker run --detach=true -v $SLAVE_DATA:/data -v $SLAVE_LOGS:/logs --name=mesos_slave_$i --entrypoint="mesos-slave" -e "MESOS_MASTER=zk://${SERVERS_INTERNAL_ARR[0]}:2181/mesos" -e "MESOS_LOG_DIR=/logs" -e "MESOS_LOGGING_LEVEL=INFO" ${MESOS_IMAGE_NAME} $SLAVE_ARGS >/home/$SSH_USER/slave_$i.log"
+            "docker run --detach=true --net=host -v $SLAVE_DATA:/data -v $SLAVE_LOGS:/logs -v /sys:/sys -v /var/run/docker.sock:/var/run/docker.sock --name=mesos_slave_$i --entrypoint="mesos-slave" -e "MESOS_MASTER=zk://${SERVERS_INTERNAL_ARR[0]}:2181/mesos" -e "MESOS_WORK_DIR=/data" -e "MESOS_LOG_DIR=/logs" -e "MESOS_LOGGING_LEVEL=INFO" -e "MESOS_IP=${SERVERS_INTERNAL_ARR[$i]}" -e "MESOS_HOSTNAME=${SERVERS_INTERNAL_ARR[$i]}" -e "MESOS_CONTAINERIZERS=docker,mesos" ${MESOS_IMAGE_NAME} $SLAVE_ARGS >/home/$SSH_USER/slave_$i.log"
         do
             echo "Error in remote docker run, retrying..."
         done
@@ -192,6 +195,9 @@ startMesosClusterWithDocker() {
     echo "   http://${SERVERS_EXTERNAL_ARR[0]}:8080"
     echo "Zookeeper running at:"
     echo "   http://${SERVERS_EXTERNAL_ARR[0]}:2181"
-    echo 
+    echo "Slaves running on machines:"
+    for i in `seq 0 $LASTSERVER` ; do
+      echo "   ${SERVERS_EXTERNAL_ARR[$i]} (internal IP: ${SERVERS_INTERNAL_ARR[$i]}:5051"
+    done
 }
 

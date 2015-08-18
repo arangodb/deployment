@@ -182,6 +182,8 @@ echo "MACHINE_TYPE: $MACHINE_TYPE"
 echo "NUMBER OF MACHINES: $NUMBER"
 echo "MACHINE PREFIX: $PREFIX"
 
+LASTSERVER=`expr $NUMBER - 1`
+echo LASTSERVER=${LASTSERVER}
 mkdir -p "$OUTPUT/temp"
 
 #export CLOUDSDK_CONFIG="$OUTPUT/gce"
@@ -209,8 +211,9 @@ if [ -n "${SSH_AUTH_SOCK}" ]; then
 fi
 
 #add firewall rule for mesos-test tag
-gcloud compute firewall-rules create "${PREFIX}firewall" --allow tcp:8529,tcp:8629,tcp:8630 --target-tags "${PREFIX}tag"
-# FIXME: Add the right port range
+echo "Setting up a firewall rule for the cluster..."
+gcloud compute firewall-rules create "${PREFIX}firewall" --allow tcp:22,tcp:5050,tcp:8080,tcp:8181,tcp:2181 --target-tags "${PREFIX}tag"
+# FIXME: Remove zookeeper and the ArangoDB framework later on
 
 if [ $? -eq 0 ]; then
   echo
@@ -284,6 +287,11 @@ echo Internal IPs: ${SERVERS_INTERNAL_GCE[@]}
 echo External IPs: ${SERVERS_EXTERNAL_GCE[@]}
 echo IDs         : ${SERVERS_IDS_GCE[@]}
 
+echo Remove host key entries in ~/.ssh/known_hosts...
+for ip in ${SERVERS_EXTERNAL_GCE[@]} ; do
+  ssh-keygen -f ~/.ssh/known_hosts -R $ip
+done
+
 # Prepare local SSD drives:
 
 # First we need two scripts:
@@ -312,8 +320,7 @@ EOF
 chmod 755 $OUTPUT/mountSSD.sh
 
 echo Preparing local SSD driver...
-LASTDBSERVER=`expr $NRDBSERVERS - 1`
-for i in `seq 0 $LASTDBSERVER` ; do
+for i in `seq 0 $LASTSERVER` ; do
     ip=${SERVERS_EXTERNAL_GCE[$i]}
     echo Preparing local SSD drives for $ip...
     scp -o"StrictHostKeyChecking no" $OUTPUT/prepareSSD.sh core@$ip:

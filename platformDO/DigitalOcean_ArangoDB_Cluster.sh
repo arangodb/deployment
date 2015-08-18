@@ -443,6 +443,11 @@ echo Internal IPs: ${SERVERS_INTERNAL_DO[@]}
 echo External IPs: ${SERVERS_EXTERNAL_DO[@]}
 echo IDs         : ${SERVERS_IDS_DO[@]}
 
+echo Remove host key entries in ~/.ssh/known_hosts...
+for ip in ${SERVERS_EXTERNAL_DO[@]} ; do
+  ssh-keygen -f ~/.ssh/known_hosts -R $ip
+done
+
 SERVERS_INTERNAL="${SERVERS_INTERNAL_DO[@]}"
 SERVERS_EXTERNAL="${SERVERS_EXTERNAL_DO[@]}"
 SERVERS_IDS="${SERVERS_IDS_DO[@]}"

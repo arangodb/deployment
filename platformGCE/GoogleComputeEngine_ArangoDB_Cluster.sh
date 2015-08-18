@@ -311,6 +311,11 @@ echo Internal IPs: ${SERVERS_INTERNAL_GCE[@]}
 echo External IPs: ${SERVERS_EXTERNAL_GCE[@]}
 echo IDs         : ${SERVERS_IDS_GCE[@]}
 
+echo Remove host key entries in ~/.ssh/known_hosts...
+for ip in ${SERVERS_EXTERNAL_GCE[@]} ; do
+  ssh-keygen -f ~/.ssh/known_hosts -R $ip
+done
+
 # Prepare local SSD drives:
 
 # First we need two scripts:
