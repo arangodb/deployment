@@ -6,6 +6,7 @@
 #
 # Prerequisites:
 # The following environment variables are used:
+#   OUTPUT           : a path to a directory with the cluster information
 #   SERVERS_EXTERNAL : list of IP addresses or hostnames, separated by 
 #                      whitespace, this must be the network interfaces
 #                      that are reachable from the outside
@@ -18,18 +19,6 @@
 #                      quotes [default: "-oStrictHostKeyChecking no"]
 #   SSH_USER         : user name on remote machine [default "ubuntu"]
 #   SSH_SUFFIX       : suffix for ssh command [default ""].
-#   ZOOKEEPER_DATA   : default: "/home/$SSH_USER/zookeeper"
-#   ZOOKEEPER_LOGS   : default: "/home/$SSH_USER/zookeeper_logs"
-#   MASTER_DATA      : default: "/home/$SSH_USER/mesos_master"
-#   MASTER_LOGS      : default: "/home/$SSH_USER/mesos_master_logs"
-#   SLAVE_DATA       : default: "/home/$SSH_USER/mesos_slave"
-#   SLAVE_LOGS       : default: "/home/$SSH_USER/mesos_slave_logs"
-#   MARATHON_DATA    : default: "/home/$SSH_USER/marathon"
-#   MARATHON_LOGS    : default: "/home/$SSH_USER/marathon-logs"
-#   ZOOKEEPER_ARGS   : default: ""
-#   MASTER_ARGS      : default: ""
-#   SLAVE_ARGS       : default: ""
-#   MARATHON_ARGS    : default: ""
 
 # There will be one Zookeeper instance running on the first machine.
 # There will be one Mesos master instance running on the first machine.
@@ -40,25 +29,7 @@
 # via ssh using the following command for server number i:
 #   ${SSH_CMD} "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[i]} ${SSH_SUFFIX} sudo docker run ...
 
-startMesosClusterWithDocker() {
-
-    ZOOKEEPER_IMAGE_NAME=neunhoef/zookeeper
-    MESOS_IMAGE_NAME=neunhoef/mesosphere-docker-mesos-master
-    MARATHON_IMAGE_NAME=neunhoef/mesosphere-docker-marathon
-
-    # Three docker images are needed: 
-    #  ${ZOOKEEPER_IMAGE_NAME} for zookeeper, and
-    #  ${MESOS_IMAGE_NAME} for Mesos master and slave
-    #  ${MARATHON_IMAGE_NAME} for Marathon
-
-    # To stop the cluster simply stop and remove the containers with the
-    # names
-    #   - zookeeper
-    #   - mesos_master
-    #   - mesos_slaves (all of them)
-    #   - marathon
-    # on all machines.
-
+startMesosClusterOnUbuntu() {
     set +u
 
     if [ -z "$SERVERS_EXTERNAL" ] ; then
@@ -94,92 +65,67 @@ startMesosClusterWithDocker() {
     fi
     echo SSH_USER=$SSH_USER
 
-    if [ -z "$ZOOKEEPER_DATA" ] ; then
-      ZOOKEEPER_DATA=/home/$SSH_USER/zookeeper
-    fi
-    echo ZOOKEEPER_DATA=$ZOOKEEPER_DATA
+    cat <<'EOF' >$OUTPUT/prepareUbuntuMaster.sh
+#!/bin/bash
+DISTRO=$(lsb_release -is | tr '[:upper:]' '[:lower:]')
+CODENAME=$(lsb_release -cs)
+echo "deb http://repos.mesosphere.io/${DISTRO} ${CODENAME} main" | tee /etc/apt/sources.list.d/mesosphere.list
+apt-key adv --keyserver keyserver.ubuntu.com --recv E56151BF
+apt-get -y update
+apt-get -y install curl python-setuptools python-pip python-dev python-protobuf
+apt-get -y install zookeeperd zookeeper mesos docker.io lxc marathon
+EOF
+    cat <<EOF >>$OUTPUT/prepareUbuntuMaster.sh
+echo zk://${SERVERS_INTERNAL_ARR[0]}:2181/mesos >/etc/mesos/zk
+echo "HOSTNAME=${SERVERS_INTERNAL_ARR[0]}" >>/etc/default/mesos-master
+echo "IP=${SERVERS_INTERNAL_ARR[0]}" >>/etc/default/mesos-master
+service mesos-master restart
+echo "IP=${SERVERS_INTERNAL_ARR[0]}" >>/etc/default/mesos-slave
+echo "export MESOS_CONTAINERIZERS=docker,mesos" >>/etc/default/mesos-slave
+service mesos-slave restart
+service marathon restart
+adduser ubuntu docker
+EOF
+    chmod 755 $OUTPUT/prepareUbuntuMaster.sh
 
-    if [ -z "$ZOOKEEPER_LOGS" ] ; then
-      ZOOKEEPER_LOGS=/home/$SSH_USER/zookeeper_logs
-    fi
-    echo ZOOKEEPER_LOGS=$ZOOKEEPER_LOGS
+    for i in `seq 1 $LASTSERVER` ; do
+        cat <<'EOF' >$OUTPUT/prepareUbuntu_$i.sh
+#!/bin/bash
+DISTRO=$(lsb_release -is | tr '[:upper:]' '[:lower:]')
+CODENAME=$(lsb_release -cs)
+echo "deb http://repos.mesosphere.io/${DISTRO} ${CODENAME} main" | tee /etc/apt/sources.list.d/mesosphere.list
+apt-key adv --keyserver keyserver.ubuntu.com --recv E56151BF
+apt-get -y update
+apt-get -y install curl python-setuptools python-pip python-dev python-protobuf
+apt-get -y install mesos docker.io lxc
+service mesos-master stop
+service zookeeper stop
+rm /etc/init/mesos-master.conf
+rm /etc/init/zookeeper.conf
+adduser ubuntu docker
+EOF
+        cat <<EOF >>$OUTPUT/prepareUbuntu_$i.sh
+echo zk://${SERVERS_INTERNAL_ARR[0]}:2181/mesos >/etc/mesos/zk
+echo "IP=${SERVERS_INTERNAL_ARR[$i]}" >>/etc/default/mesos-slave
+echo "export MESOS_CONTAINERIZERS=docker,mesos" >>/etc/default/mesos-slave
+service mesos-slave restart
+EOF
+        chmod 755 $OUTPUT/prepareUbuntu_$i.sh
+    done
 
-    if [ -z "$MASTER_DATA" ] ; then
-      MASTER_DATA=/home/$SSH_USER/mesos_master
-    fi
-    echo MASTER_DATA=$MASTER_DATA
+    echo Preparing master...
+    scp -o"StrictHostKeyChecking no" $OUTPUT/prepareUbuntuMaster.sh ubuntu@${SERVERS_EXTERNAL_ARR[0]}:
+    ssh -o"StrictHostKeyChecking no" ubuntu@${SERVERS_EXTERNAL_ARR[0]} "sudo ./prepareUbuntuMaster.sh"
 
-    if [ -z "$MASTER_LOGS" ] ; then
-      MASTER_LOGS=/home/$SSH_USER/mesos_master_logs
-    fi
-    echo MASTER_LOGS=$MASTER_LOGS
-
-    if [ -z "$SLAVE_DATA" ] ; then
-      SLAVE_DATA=/home/$SSH_USER/mesos_slave
-    fi
-    echo SLAVE_DATA=$SLAVE_DATA
-
-    if [ -z "$SLAVE_LOGS" ] ; then
-      SLAVE_LOGS=/home/$SSH_USER/mesos_slave_logs
-    fi
-    echo SLAVE_LOGS=$SLAVE_LOGS
-
-    if [ -z "$MARATHON_DATA" ] ; then
-      MARATHON_DATA=/home/$SSH_USER/marathon
-    fi
-    echo MARATHON_DATA=$MARATHON_DATA
-
-    if [ -z "$MARATHON_LOGS" ] ; then
-      MARATHON_LOGS=/home/$SSH_USER/marathon_logs
-    fi
-    echo MARATHON_LOGS=$MARATHON_LOGS
-    echo ZOOKEEPER_ARGS=$ZOOKEEPER_ARGS
-    echo MASTER_ARGS=$MASTER_ARGS
-    echo SLAVE_ARGS=$SLAVE_ARGS
-    echo MARATHON_ARGS=$MARATHON_ARGS
-
-    echo Creating directories on servers. This may take some time. Please wait.
-        $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[0]} $SSH_SUFFIX mkdir $ZOOKEEPER_DATA $ZOOKEEPER_LOGS $MASTER_DATA $MASTER_LOGS $MARATHON_DATA $MARATHON_LOGS >/dev/null 2>&1 &
-    for i in `seq 0 $LASTSERVER` ; do
-        $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[$i]} $SSH_SUFFIX mkdir $SLAVE_DATA $SLAVE_LOGS >/dev/null 2>&1 &
+    echo "Preparing slaves (parallel)..."
+    for i in `seq 1 $LASTSERVER` ; do
+        ip=${SERVERS_EXTERNAL_ARR[$i]}
+        echo Preparing slave $ip...
+        scp -o"StrictHostKeyChecking no" $OUTPUT/prepareUbuntu_$i.sh ubuntu@$ip:
+        ssh -o"StrictHostKeyChecking no" ubuntu@$ip "sudo ./prepareUbuntu_$i.sh" &
     done
 
     wait
-
-    echo Starting Zookeeper...
-    until $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[0]} $SSH_SUFFIX "sudo docker run --detach=true -p 2181:2181 -p 2888:2888 -p 3888:3888 --name=zookeeper -v $ZOOKEEPER_DATA:/tmp/zookeeper ${ZOOKEEPER_IMAGE_NAME} $ZOOKEEPER_ARGS >/home/$SSH_USER/zookeeper.log"
-    do
-        echo "Error in remote docker run, retrying..."
-    done
-
-    sleep 1
-    echo Initializing Mesos master...
-    until $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[0]} $SSH_SUFFIX "sudo docker run --name=mesos_master --net=host -v $MASTER_DATA:/data -v $MASTER_LOGS:/logs -e "MESOS_HOSTNAME=${SERVERS_INTERNAL_ARR[0]}" -e "MESOS_IP=${SERVERS_INTERNAL_ARR[0]}" -e "MESOS_ZK=zk://${SERVERS_INTERNAL_ARR[0]}:2181/mesos" -e "MESOS_PORT=5050" -e "MESOS_WORK_DIR=/data" -e "MESOS_LOG_DIR=/logs" -e "MESOS_QUORUM=1" -e "MESOS_REGISTRY=in_memory" -e "MESOS_ROLES=arangodb" --detach=true ${MESOS_IMAGE_NAME} $MASTER_ARGS > /home/$SSH_USER/mesos_master.log"
-    do
-        echo "Error in remote docker run, retrying..."
-    done
-    # FIXME: use registry "replicated_log" eventually (or now?)
-
-    sleep 1
-    echo Initializing Marathon... 
-    until $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[0]} $SSH_SUFFIX "sudo docker run --name=marathon -p 8080:8080 --detach=true -v $MARATHON_DATA:/data -v $MARATHON_LOGS:/logs ${MARATHON_IMAGE_NAME} --master zk://${SERVERS_INTERNAL_ARR[0]}:2181/mesos --zk zk://${SERVERS_INTERNAL_ARR[0]}:2181/marathon $MARATHON_ARGS > /home/$SSH_USER/mesos_master.log"
-    do
-        echo "Error in remote docker run, retrying..."
-    done
-
-    start_slave () {
-        i=$1
-        echo Starting Mesos slave on ${SERVERS_EXTERNAL_ARR[$i]}:
-
-        $SSH_CMD -f "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[$i]} $SSH_SUFFIX \
-            "mesos-slave --master=zk://${SERVERS_INTERNAL_ARR[0]}:2181/mesos --work_dir=$SLAVE_DATA --log_dir=$SLAVE_LOGS --logging_level=INFO --ip=${SERVERS_INTERNAL_ARR[$i]} --hostname=${SERVERS_INTERNAL_ARR[$i]} --containerizers=docker,mesos $SLAVE_ARGS >/home/$SSH_USER/slave_$i.log 2>&1"
-    }
-
-    for i in `seq 0 $LASTSERVER` ; do
-        start_slave $i
-    done
-
-    sleep 5
 
     echo ""
     echo "=============================================================================="
@@ -187,14 +133,14 @@ startMesosClusterWithDocker() {
     echo "=============================================================================="
     echo ""
     echo "Mesos master available at:"
-    echo "   http://${SERVERS_EXTERNAL_ARR[0]}:5050"
+    echo "   http://${SERVERS_EXTERNAL_ARR[0]}:5050 (internal IP: ${SERVERS_INTERNAL_ARR[0]})"
     echo "Marathon available at:"
     echo "   http://${SERVERS_EXTERNAL_ARR[0]}:8080"
     echo "Zookeeper running at:"
     echo "   http://${SERVERS_EXTERNAL_ARR[0]}:2181"
     echo "Slaves running on machines:"
     for i in `seq 0 $LASTSERVER` ; do
-      echo "   ${SERVERS_EXTERNAL_ARR[$i]} (internal IP: ${SERVERS_INTERNAL_ARR[$i]}:5051"
+        echo "   ubuntu@${SERVERS_EXTERNAL_ARR[$i]} (internal IP: ${SERVERS_INTERNAL_ARR[$i]}:5051)"
     done
 }
 

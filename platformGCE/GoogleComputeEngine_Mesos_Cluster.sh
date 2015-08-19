@@ -303,9 +303,9 @@ for i in `seq 0 $LASTSERVER` ; do
     done
 done
 
-# Prepare local SSD drives and install some stuff:
+# Prepare local SSD drives:
 
-# First we need three scripts:
+# First we need two scripts:
 cat <<EOF >$OUTPUT/prepareSSD.sh
 #!/bin/bash
 parted -s /dev/disk/by-id/scsi-0Google_EphemeralDisk_local-ssd mklabel msdos
@@ -330,66 +330,15 @@ echo never > /sys/kernel/mm/transparent_hugepage/defrag
 EOF
 chmod 755 $OUTPUT/mountSSD.sh
 
-cat <<'EOF' >$OUTPUT/prepareUbuntuMaster.sh
-#!/bin/bash
-DISTRO=$(lsb_release -is | tr '[:upper:]' '[:lower:]')
-CODENAME=$(lsb_release -cs)
-echo "deb http://repos.mesosphere.io/${DISTRO} ${CODENAME} main" | tee /etc/apt/sources.list.d/mesosphere.list
-apt-key adv --keyserver keyserver.ubuntu.com --recv E56151BF
-apt-get -y update
-apt-get -y install curl python-setuptools python-pip python-dev python-protobuf
-apt-get -y install zookeeperd zookeeper mesos docker.io lxc marathon
-EOF
-cat <<EOF >>$OUTPUT/prepareUbuntuMaster.sh
-echo zk://${SERVERS_INTERNAL_GCE[0]}:2181/mesos >/etc/mesos/zk
-echo MESOS_HOSTNAME=${SERVERS_INTERNAL_GCE[0]} >>/etc/default/mesos-master
-echo MESOS_IP=${SERVERS_INTERNAL_GCE[0]} >>/etc/default/mesos-master
-service mesos-master restart
-echo MESOS_IP=${SERVERS_INTERNAL_GCE[0]} >>/etc/default/mesos-slave
-echo MESOS_CONTAINERIZERS=docker,mesos >>/etc/default/mesos-slave
-service mesos-slave restart
-service marathon restart
-EOF
-chmod 755 $OUTPUT/prepareUbuntuMaster.sh
-
-for i in `seq 1 $LASTSERVER` ; do
-    cat <<'EOF' >$OUTPUT/prepareUbuntu_$i.sh
-#!/bin/bash
-DISTRO=$(lsb_release -is | tr '[:upper:]' '[:lower:]')
-CODENAME=$(lsb_release -cs)
-echo "deb http://repos.mesosphere.io/${DISTRO} ${CODENAME} main" | tee /etc/apt/sources.list.d/mesosphere.list
-apt-key adv --keyserver keyserver.ubuntu.com --recv E56151BF
-apt-get -y update
-apt-get -y install curl python-setuptools python-pip python-dev python-protobuf
-apt-get -y install mesos docker.io lxc
-service mesos-master stop
-service zookeeper stop
-rm /etc/init/mesos-master.conf
-rm /etc/init/zookeeper.conf
-EOF
-    cat <<EOF >>$OUTPUT/prepareUbuntu_$i.sh
-echo zk://${SERVERS_INTERNAL_GCE[0]}:2181/mesos >/etc/mesos/zk
-echo MESOS_IP=${SERVERS_INTERNAL_GCE[$i]} >>/etc/default/mesos-slave
-echo MESOS_CONTAINERIZERS=docker,mesos >>/etc/default/mesos-slave
-service mesos-slave restart
-EOF
-    chmod 755 $OUTPUT/prepareUbuntu_$i.sh
-done
-
-echo Preparing master...
-scp -o"StrictHostKeyChecking no" $OUTPUT/prepareSSD.sh $OUTPUT/mountSSD.sh $OUTPUT/prepareUbuntuMaster.sh ubuntu@${SERVERS_EXTERNAL_GCE[0]}:
-ssh -o"StrictHostKeyChecking no" ubuntu@${SERVERS_EXTERNAL_GCE[0]} "sudo ./prepareSSD.sh && sudo ./mountSSD.sh && sudo ./prepareUbuntuMaster.sh"
-
-echo "Preparing slaves (parallel)..."
-for i in `seq 1 $LASTSERVER` ; do
+echo "Preparing machines (parallel)..."
+for i in `seq 0 $LASTSERVER` ; do
     ip=${SERVERS_EXTERNAL_GCE[$i]}
-    echo Preparing slave $ip...
-    scp -o"StrictHostKeyChecking no" $OUTPUT/prepareSSD.sh $OUTPUT/mountSSD.sh $OUTPUT/prepareUbuntu_$i.sh ubuntu@$ip:
-    ssh -o"StrictHostKeyChecking no" ubuntu@$ip "sudo ./prepareSSD.sh && sudo ./mountSSD.sh && sudo ./prepareUbuntu_$i.sh" &
+    echo Preparing machine $ip...
+    scp -o"StrictHostKeyChecking no" $OUTPUT/prepareSSD.sh $OUTPUT/mountSSD.sh ubuntu@$ip:
+    ssh -o"StrictHostKeyChecking no" ubuntu@$ip "sudo ./prepareSSD.sh && sudo ./mountSSD.sh" &
 done
 
 wait
-
 SERVERS_INTERNAL="${SERVERS_INTERNAL_GCE[@]}"
 SERVERS_EXTERNAL="${SERVERS_EXTERNAL_GCE[@]}"
 SERVERS_IDS="${SERVERS_IDS_GCE[@]}"
@@ -405,18 +354,4 @@ echo >>$OUTPUT/clusterinfo.sh "PREFIX=\"$PREFIX\""
 echo >>$OUTPUT/clusterinfo.sh "ZONE=\"$ZONE\""
 echo >>$OUTPUT/clusterinfo.sh "PROJECT=\"$PROJECT\""
 
-echo ""
-echo "=============================================================================="
-echo "Done, your cluster is ready."
-echo "=============================================================================="
-echo ""
-echo "Mesos master available at:"
-echo "   http://${SERVERS_EXTERNAL_GCE[0]}:5050"
-echo "Marathon available at:"
-echo "   http://${SERVERS_EXTERNAL_GCE[0]}:8080"
-echo "Zookeeper running at:"
-echo "   http://${SERVERS_EXTERNAL_GCE[0]}:2181"
-echo "Slaves running on machines:"
-for i in `seq 0 $LASTSERVER` ; do
-  echo "   ${SERVERS_EXTERNAL_GCE[$i]} (internal IP: ${SERVERS_INTERNAL_GCE[$i]}:5051"
-done
+startMesosClusterOnUbuntu
