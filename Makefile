@@ -24,9 +24,9 @@ AmazonWebServices_ArangoDB_Cluster.sh: Makefile platformAWS/AmazonWebServices_Ar
 	cat platformAWS/AmazonWebServices_ArangoDB_Cluster.sh >> $@
 	chmod 755 $@
 
-GoogleComputeEngine_Mesos_Cluster.sh: Makefile platformGCE/GoogleComputeEngine_Mesos_Cluster.sh Docker/MesosClusterWithDocker.sh
+GoogleComputeEngine_Mesos_Cluster.sh: Makefile platformGCE/GoogleComputeEngine_Mesos_Cluster.sh Ubuntu/MesosClusterOnUbuntu.sh
 	echo "#!/bin/bash" > $@
-	cat Ubuntu/MesosClusterWithUbuntu.sh >> $@
+	cat Ubuntu/MesosClusterOnUbuntu.sh >> $@
 	cat platformGCE/GoogleComputeEngine_Mesos_Cluster.sh >> $@
 	chmod 755 $@
 

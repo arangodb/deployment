@@ -77,9 +77,10 @@ apt-get -y install zookeeperd zookeeper mesos docker.io lxc marathon
 EOF
     cat <<EOF >>$OUTPUT/prepareUbuntuMaster.sh
 echo zk://${SERVERS_INTERNAL_ARR[0]}:2181/mesos >/etc/mesos/zk
-echo "HOSTNAME=${SERVERS_INTERNAL_ARR[0]}" >>/etc/default/mesos-master
+echo "export MESOS_HOSTNAME=${SERVERS_INTERNAL_ARR[0]}" >>/etc/default/mesos-master
 echo "IP=${SERVERS_INTERNAL_ARR[0]}" >>/etc/default/mesos-master
 service mesos-master restart
+echo "export MESOS_HOSTNAME=${SERVERS_INTERNAL_ARR[0]}" >>/etc/default/mesos-master
 echo "IP=${SERVERS_INTERNAL_ARR[0]}" >>/etc/default/mesos-slave
 echo "export MESOS_CONTAINERIZERS=docker,mesos" >>/etc/default/mesos-slave
 service mesos-slave restart
@@ -107,6 +108,7 @@ EOF
         cat <<EOF >>$OUTPUT/prepareUbuntu_$i.sh
 echo zk://${SERVERS_INTERNAL_ARR[0]}:2181/mesos >/etc/mesos/zk
 echo "IP=${SERVERS_INTERNAL_ARR[$i]}" >>/etc/default/mesos-slave
+echo "export MESOS_HOSTNAME=${SERVERS_INTERNAL_ARR[$i]}" >>/etc/default/mesos-slave
 echo "export MESOS_CONTAINERIZERS=docker,mesos" >>/etc/default/mesos-slave
 service mesos-slave restart
 EOF
@@ -114,15 +116,15 @@ EOF
     done
 
     echo Preparing master...
-    scp -o"StrictHostKeyChecking no" $OUTPUT/prepareUbuntuMaster.sh ubuntu@${SERVERS_EXTERNAL_ARR[0]}:
-    ssh -o"StrictHostKeyChecking no" ubuntu@${SERVERS_EXTERNAL_ARR[0]} "sudo ./prepareUbuntuMaster.sh"
+    cat $OUTPUT/prepareUbuntuMaster.sh | $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[0]} $SSH_SUFFIX "cat >prepareUbuntuMaster.sh ; chmod 755 prepareUbuntuMaster.sh"
+    $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[0]} $SSH_SUFFIX "sudo ./prepareUbuntuMaster.sh"
 
     echo "Preparing slaves (parallel)..."
     for i in `seq 1 $LASTSERVER` ; do
         ip=${SERVERS_EXTERNAL_ARR[$i]}
         echo Preparing slave $ip...
-        scp -o"StrictHostKeyChecking no" $OUTPUT/prepareUbuntu_$i.sh ubuntu@$ip:
-        ssh -o"StrictHostKeyChecking no" ubuntu@$ip "sudo ./prepareUbuntu_$i.sh" &
+        cat $OUTPUT/prepareUbuntu_$i.sh | $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[0]} $SSH_SUFFIX "cat > $OUTPUT/prepareUbuntu_$i.sh ; chmod 755 prepareUbuntu_$i.sh"
+        $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[0]} $SSH_SUFFIX "sudo ./prepareUbuntu_$i.sh" &
     done
 
     wait
@@ -142,5 +144,9 @@ EOF
     for i in `seq 0 $LASTSERVER` ; do
         echo "   ubuntu@${SERVERS_EXTERNAL_ARR[$i]} (internal IP: ${SERVERS_INTERNAL_ARR[$i]}:5051)"
     done
+    echo ""
+    echo "Hint: You might want to use sshuttle as follows:"
+    echo "  sshuttle -r ubuntu@${SERVERS_EXTERNAL_ARR[0]} 10.0.0.0/8"
+    echo ""
 }
 

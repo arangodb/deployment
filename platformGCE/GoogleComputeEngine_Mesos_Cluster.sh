@@ -343,6 +343,15 @@ SERVERS_INTERNAL="${SERVERS_INTERNAL_GCE[@]}"
 SERVERS_EXTERNAL="${SERVERS_EXTERNAL_GCE[@]}"
 SERVERS_IDS="${SERVERS_IDS_GCE[@]}"
 
+# Export needed variables
+export SERVERS_INTERNAL
+export SERVERS_EXTERNAL
+export SERVERS_IDS
+export SSH_USER="ubuntu"
+export SSH_CMD="ssh"
+export SSH_SUFFIX="-i $DEFAULT_KEY_PATH"
+export OUTPUT
+
 # Write data to file:
 echo > $OUTPUT/clusterinfo.sh "SERVERS_INTERNAL=\"$SERVERS_INTERNAL\""
 echo >>$OUTPUT/clusterinfo.sh "SERVERS_EXTERNAL=\"$SERVERS_EXTERNAL\""
