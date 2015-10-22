@@ -212,7 +212,7 @@ fi
 
 #add firewall rule for mesos-test tag
 echo "Setting up a firewall rule for the cluster..."
-gcloud compute firewall-rules create "${PREFIX}firewall" --allow tcp:22,tcp:5050,tcp:8080,tcp:8181,tcp:2181 --target-tags "${PREFIX}tag"
+gcloud compute firewall-rules create "${PREFIX}firewall" --allow tcp:22,tcp:5050,tcp:8080,tcp:8181,tcp:2181,tcp:31000-31999 --target-tags "${PREFIX}tag"
 # FIXME: Remove zookeeper and the ArangoDB framework later on
 
 if [ $? -eq 0 ]; then
@@ -319,11 +319,13 @@ chmod 755 $OUTPUT/prepareSSD.sh
 
 cat <<EOF >$OUTPUT/mountSSD.sh
 #!/bin/bash
-swapon /dev/disk/by-id/scsi-0Google_EphemeralDisk_local-ssd-part1
+echo "/dev/disk/by-id/scsi-0Google_EphemeralDisk_local-ssd-part1 none swap defaults 0 0" >> /etc/fstab
+swapon -a
 if [ ! -d /data ] ; then
     mkdir /data
 fi
-mount /dev/disk/by-id/scsi-0Google_EphemeralDisk_local-ssd-part2 /data -t ext4
+echo "/dev/disk/by-id/scsi-0Google_EphemeralDisk_local-ssd-part2 /data ext4 defaults 0 0" >> /etc/fstab
+mount -a
 chown ubuntu.ubuntu /data
 echo never > /sys/kernel/mm/transparent_hugepage/enabled
 echo never > /sys/kernel/mm/transparent_hugepage/defrag

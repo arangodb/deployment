@@ -73,15 +73,15 @@ echo "deb http://repos.mesosphere.io/${DISTRO} ${CODENAME} main" | tee /etc/apt/
 apt-key adv --keyserver keyserver.ubuntu.com --recv E56151BF
 apt-get -y update
 apt-get -y install curl python-setuptools python-pip python-dev python-protobuf
-apt-get -y install zookeeperd zookeeper mesos docker.io lxc marathon
+apt-get -y install zookeeperd zookeeper mesos=0.23.1-0.2.61.ubuntu1404 docker.io lxc marathon
 EOF
     cat <<EOF >>$OUTPUT/prepareUbuntuMaster.sh
 echo zk://${SERVERS_INTERNAL_ARR[0]}:2181/mesos >/etc/mesos/zk
 echo "export MESOS_HOSTNAME=${SERVERS_INTERNAL_ARR[0]}" >>/etc/default/mesos-master
 echo "IP=${SERVERS_INTERNAL_ARR[0]}" >>/etc/default/mesos-master
 service mesos-master restart
-echo "export MESOS_HOSTNAME=${SERVERS_INTERNAL_ARR[0]}" >>/etc/default/mesos-master
 echo "IP=${SERVERS_INTERNAL_ARR[0]}" >>/etc/default/mesos-slave
+echo "export MESOS_HOSTNAME=${SERVERS_INTERNAL_ARR[0]}" >>/etc/default/mesos-slave
 echo "export MESOS_CONTAINERIZERS=docker,mesos" >>/etc/default/mesos-slave
 service mesos-slave restart
 service marathon restart
@@ -98,7 +98,7 @@ echo "deb http://repos.mesosphere.io/${DISTRO} ${CODENAME} main" | tee /etc/apt/
 apt-key adv --keyserver keyserver.ubuntu.com --recv E56151BF
 apt-get -y update
 apt-get -y install curl python-setuptools python-pip python-dev python-protobuf
-apt-get -y install mesos docker.io lxc
+apt-get -y install mesos=0.23.1-0.2.61.ubuntu1404 docker.io lxc
 service mesos-master stop
 service zookeeper stop
 rm /etc/init/mesos-master.conf
@@ -123,8 +123,8 @@ EOF
     for i in `seq 1 $LASTSERVER` ; do
         ip=${SERVERS_EXTERNAL_ARR[$i]}
         echo Preparing slave $ip...
-        cat $OUTPUT/prepareUbuntu_$i.sh | $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[0]} $SSH_SUFFIX "cat > $OUTPUT/prepareUbuntu_$i.sh ; chmod 755 prepareUbuntu_$i.sh"
-        $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[0]} $SSH_SUFFIX "sudo ./prepareUbuntu_$i.sh" &
+        cat $OUTPUT/prepareUbuntu_$i.sh | $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[$i]} $SSH_SUFFIX "cat >prepareUbuntu_$i.sh ; chmod 755 prepareUbuntu_$i.sh"
+        $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[$i]} $SSH_SUFFIX "sudo ./prepareUbuntu_$i.sh" &
     done
 
     wait
@@ -142,7 +142,7 @@ EOF
     echo "   http://${SERVERS_EXTERNAL_ARR[0]}:2181"
     echo "Slaves running on machines:"
     for i in `seq 0 $LASTSERVER` ; do
-        echo "   ubuntu@${SERVERS_EXTERNAL_ARR[$i]} (internal IP: ${SERVERS_INTERNAL_ARR[$i]}:5051)"
+        echo "   ssh ubuntu@${SERVERS_EXTERNAL_ARR[$i]} (internal IP: ${SERVERS_INTERNAL_ARR[$i]}:5051)"
     done
     echo ""
     echo "Hint: You might want to use sshuttle as follows:"
