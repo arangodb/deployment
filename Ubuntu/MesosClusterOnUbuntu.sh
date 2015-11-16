@@ -65,6 +65,10 @@ startMesosClusterOnUbuntu() {
     fi
     echo SSH_USER=$SSH_USER
 
+################################################################################
+# MASTER script:
+################################################################################
+
     cat <<'EOF' >$OUTPUT/prepareUbuntuMaster.sh
 #!/bin/bash
 DISTRO=$(lsb_release -is | tr '[:upper:]' '[:lower:]')
@@ -73,12 +77,16 @@ echo "deb http://repos.mesosphere.io/${DISTRO} ${CODENAME} main" | tee /etc/apt/
 apt-key adv --keyserver keyserver.ubuntu.com --recv E56151BF
 apt-get -y update
 apt-get -y install curl python-setuptools python-pip python-dev python-protobuf
-apt-get -y install zookeeperd zookeeper mesos=0.23.1-0.2.61.ubuntu1404 docker.io lxc marathon
+apt-get -y install zookeeperd zookeeper mesos docker.io lxc marathon
 EOF
     cat <<EOF >>$OUTPUT/prepareUbuntuMaster.sh
+echo 1 > /var/lib/zookeeper/myid
+service zookeeper restart
 echo zk://${SERVERS_INTERNAL_ARR[0]}:2181/mesos >/etc/mesos/zk
 echo "export MESOS_HOSTNAME=${SERVERS_INTERNAL_ARR[0]}" >>/etc/default/mesos-master
 echo "IP=${SERVERS_INTERNAL_ARR[0]}" >>/etc/default/mesos-master
+echo "export MESOS_ROLES=arangodb" >>/etc/default/mesos-master
+echo "export MESOS_WEIGHTS=arangodb=1" >>/etc/default/mesos-master
 service mesos-master restart
 echo "IP=${SERVERS_INTERNAL_ARR[0]}" >>/etc/default/mesos-slave
 echo "export MESOS_HOSTNAME=${SERVERS_INTERNAL_ARR[0]}" >>/etc/default/mesos-slave
@@ -89,6 +97,10 @@ adduser ubuntu docker
 EOF
     chmod 755 $OUTPUT/prepareUbuntuMaster.sh
 
+################################################################################
+# SLAVE scripts:
+################################################################################
+
     for i in `seq 1 $LASTSERVER` ; do
         cat <<'EOF' >$OUTPUT/prepareUbuntu_$i.sh
 #!/bin/bash
@@ -98,11 +110,11 @@ echo "deb http://repos.mesosphere.io/${DISTRO} ${CODENAME} main" | tee /etc/apt/
 apt-key adv --keyserver keyserver.ubuntu.com --recv E56151BF
 apt-get -y update
 apt-get -y install curl python-setuptools python-pip python-dev python-protobuf
-apt-get -y install mesos=0.23.1-0.2.61.ubuntu1404 docker.io lxc
+apt-get -y install mesos docker.io lxc
 service mesos-master stop
+echo manual > /etc/init/mesos-master.override
 service zookeeper stop
-rm /etc/init/mesos-master.conf
-rm /etc/init/zookeeper.conf
+echo manual > /etc/init/zookeeper.override
 adduser ubuntu docker
 EOF
         cat <<EOF >>$OUTPUT/prepareUbuntu_$i.sh
@@ -115,9 +127,17 @@ EOF
         chmod 755 $OUTPUT/prepareUbuntu_$i.sh
     done
 
+################################################################################
+# preparing master...
+################################################################################
+
     echo Preparing master...
     cat $OUTPUT/prepareUbuntuMaster.sh | $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[0]} $SSH_SUFFIX "cat >prepareUbuntuMaster.sh ; chmod 755 prepareUbuntuMaster.sh"
     $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[0]} $SSH_SUFFIX "sudo ./prepareUbuntuMaster.sh"
+
+################################################################################
+# preparing slaves...
+################################################################################
 
     echo "Preparing slaves (parallel)..."
     for i in `seq 1 $LASTSERVER` ; do

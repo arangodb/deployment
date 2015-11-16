@@ -224,7 +224,7 @@ fi
 
 function createMachine () {
   echo "creating machine $PREFIX$1"
-  INSTANCE=`gcloud compute instances create --image ubuntu-14-04 --zone "$ZONE" \
+  INSTANCE=`gcloud compute instances create --image ubuntu-15-04 --zone "$ZONE" \
             --tags "${PREFIX}tag" --machine-type "$MACHINE_TYPE" \
             "$PREFIX$1" --local-ssd device-name=local-ssd \
             | grep "^$PREFIX"`
