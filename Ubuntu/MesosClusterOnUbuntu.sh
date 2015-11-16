@@ -91,6 +91,7 @@ service mesos-master restart
 echo "IP=${SERVERS_INTERNAL_ARR[0]}" >>/etc/default/mesos-slave
 echo "export MESOS_HOSTNAME=${SERVERS_INTERNAL_ARR[0]}" >>/etc/default/mesos-slave
 echo "export MESOS_CONTAINERIZERS=docker,mesos" >>/etc/default/mesos-slave
+echo "export MESOS_WORK_DIR=/data/mesos" >>/etc/default/mesos-slave
 service mesos-slave restart
 service marathon restart
 adduser ubuntu docker
@@ -122,6 +123,7 @@ echo zk://${SERVERS_INTERNAL_ARR[0]}:2181/mesos >/etc/mesos/zk
 echo "IP=${SERVERS_INTERNAL_ARR[$i]}" >>/etc/default/mesos-slave
 echo "export MESOS_HOSTNAME=${SERVERS_INTERNAL_ARR[$i]}" >>/etc/default/mesos-slave
 echo "export MESOS_CONTAINERIZERS=docker,mesos" >>/etc/default/mesos-slave
+echo "export MESOS_WORK_DIR=/data/mesos" >>/etc/default/mesos-slave
 service mesos-slave restart
 EOF
         chmod 755 $OUTPUT/prepareUbuntu_$i.sh
