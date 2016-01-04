@@ -8,7 +8,7 @@
 #   PROJECT : project id of your designated project (e.g. -p "project_id");
 #
 # Optional prerequisites:
-#   ZONE           : size of the server (e.g. -z europe-west1-b)
+#   ZONE           : zone of the server (e.g. -z europe-west1-b)
 #   MACHINE_TYPE   : size/machine-type of the instances (e.g. -m n1-standard-4)
 #   NUMBER         : count of machines to create (e.g. -n 3)
 #   OUTPUT         : local output log folder (e.g. -d /my/directory)
@@ -85,7 +85,7 @@ The following environment variables are used:
   PROJECT : project id of your designated project (e.g. -p "project_id");
 
 Optional prerequisites:
-  ZONE           : size of the server (e.g. -z europe-west1-b)
+  ZONE           : zone of the server (e.g. -z europe-west1-b)
   MACHINE_TYPE   : size/machine-type of the instance (e.g. -m n1-standard-4)
   NUMBER         : count of machines to create (e.g. -n 3)
   OUTPUT         : local output log folder (e.g. -d /my/directory)
