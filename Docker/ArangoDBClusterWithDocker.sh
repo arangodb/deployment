@@ -48,7 +48,7 @@
 
 startArangoDBClusterWithDocker() {
 
-    DOCKER_IMAGE_NAME=neunhoef/arangodb_cluster:2.6.dev-2.5
+    DOCKER_IMAGE_NAME=m0ppers/arangodb:3.0
 
     # Two docker images are needed: 
     #  microbox/etcd for the agency and
@@ -195,41 +195,28 @@ startArangoDBClusterWithDocker() {
     wait
 
     echo Starting agency...
-    until $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[0]} $SSH_SUFFIX "docker run --detach=true -p 4001:4001 -p 7001:7001 --name=agency -e "ETCD_NONO_WAL_SYNC=1" -v $AGENCY_DIR:/data ${DOCKER_IMAGE_NAME} /usr/lib/arangodb/etcd-arango --data-dir /data --listen-client-urls "http://0.0.0.0:4001" --listen-peer-urls "http://0.0.0.0:7001" >/home/$SSH_USER/agency.log"
+    until $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[0]} $SSH_SUFFIX "docker run --detach=true -p 4001:4001 -p 7001:7001 --name=agency -e "ETCD_NONO_WAL_SYNC=1" -v $AGENCY_DIR:/data ${DOCKER_IMAGE_NAME} /usr/lib/arangodb/etcd-arango --data-dir /data --listen-client-urls "http://0.0.0.0:4001" --listen-peer-urls "http://0.0.0.0:7001" --advertise-client-urls "http://${SERVERS_INTERNAL_ARR[0]}:4001" >/home/$SSH_USER/agency.log"
     do
         echo "Error in remote docker run, retrying..."
     done
 
     sleep 1
-    echo Initializing agency...
-    until $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[0]} $SSH_SUFFIX "docker run --link=agency:agency --rm ${DOCKER_IMAGE_NAME} arangosh --javascript.execute /scripts/init_agency.js > /home/$SSH_USER/init_agency.log"
-    do
-        echo "Error in remote docker run, retrying..."
-    done
-    echo Starting discovery...
-    until $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[0]} $SSH_SUFFIX "docker run --detach=true --link=agency:agency --name discovery ${DOCKER_IMAGE_NAME} arangosh --javascript.execute scripts/discover.js > /home/$SSH_USER/discovery.log"
-    do
-        echo "Error in remote docker run, retrying..."
-    done
 
     start_dbserver () {
         i=$1
         echo Starting DBserver on ${SERVERS_EXTERNAL_ARR[$i]}:$PORT_DBSERVER
 
         until $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[$i]} $SSH_SUFFIX \
-            docker run --detach=true -v $DBSERVER_DATA:/data \
+            docker run --detach=true -e ARANGO_NO_AUTH=1 -v $DBSERVER_DATA:/var/lib/arangodb \
              -v $DBSERVER_LOGS:/logs --net=host \
              --name=dbserver$PORT_DBSERVER ${DOCKER_IMAGE_NAME} \
-              arangod --database.directory /data \
-              --frontend-version-check false \
+              arangod --frontend-version-check false \
               --cluster.agency-endpoint tcp://${SERVERS_INTERNAL_ARR[0]}:4001 \
               --cluster.my-address tcp://${SERVERS_INTERNAL_ARR[$i]}:$PORT_DBSERVER \
               --server.endpoint tcp://0.0.0.0:$PORT_DBSERVER \
               --cluster.my-local-info dbserver:${SERVERS_INTERNAL_ARR[$i]}:$PORT_DBSERVER \
-              --log.file /logs/$PORT_DBSERVER.log \
+              --cluster.my-role PRIMARY \
               --dispatcher.report-interval 15 \
-              --server.foxx-queues false \
-              --server.disable-statistics true \
               --scheduler.threads 3 \
               --server.threads 5 \
               $DBSERVER_ARGS \
@@ -244,20 +231,17 @@ startArangoDBClusterWithDocker() {
         echo Starting Coordinator on ${SERVERS_EXTERNAL_ARR[$i]}:$PORT_COORDINATOR
 
         until $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[$i]} $SSH_SUFFIX \
-            docker run --detach=true -v $COORDINATOR_DATA:/data \
+            docker run --detach=true -e ARANGO_NO_AUTH=1 -v $COORDINATOR_DATA:/var/lib/arangodb \
                 -v $COORDINATOR_LOGS:/logs --net=host \
                 --name=coordinator$PORT_COORDINATOR \
                 ${DOCKER_IMAGE_NAME} \
-              arangod --database.directory /data \
-               --cluster.agency-endpoint tcp://${SERVERS_INTERNAL_ARR[0]}:4001 \
+              arangod --cluster.agency-endpoint tcp://${SERVERS_INTERNAL_ARR[0]}:4001 \
                --cluster.my-address tcp://${SERVERS_INTERNAL_ARR[$i]}:$PORT_COORDINATOR \
                --server.endpoint tcp://0.0.0.0:$PORT_COORDINATOR \
                --cluster.my-local-info \
                          coordinator:${SERVERS_INTERNAL_ARR[$i]}:$PORT_COORDINATOR \
-               --log.file /logs/$PORT_COORDINATOR.log \
+               --cluster.my-role COORDINATOR \
                --dispatcher.report-interval 15 \
-               --server.foxx-queues false \
-               --server.disable-statistics true \
                --scheduler.threads 4 \
                --server.threads 40 \
                $COORDINATOR_ARGS \
@@ -331,16 +315,13 @@ startArangoDBClusterWithDocker() {
             echo "  ${SERVERS_EXTERNAL_ARR[$i]}:$PORT_DBSERVER on ${SERVERS_EXTERNAL_ARR[$j]}:$PORT_REPLICA"
 
             until $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[$j]} $SSH_SUFFIX \
-                docker run --detach=true -v $REPLICA_DATA:/data \
+                docker run --detach=true -e ARANGO_NO_AUTH=1 -v $REPLICA_DATA:/var/lib/arangodb \
                  -v $REPLICA_LOGS:/logs --net=host \
                  --name=replica$PORT_REPLICA ${DOCKER_IMAGE_NAME} \
-                  arangod --database.directory /data \
-                  --frontend-version-check false \
+                  arangod --frontend-version-check false \
                   --server.endpoint tcp://0.0.0.0:$PORT_REPLICA \
-                  --log.file /logs/$PORT_REPLICA.log \
+                  --cluster.my-role SECONDARY \
                   --dispatcher.report-interval 15 \
-                  --server.foxx-queues false \
-                  --server.disable-statistics true \
                   --scheduler.threads 1 \
                   --server.threads 2 \
                   $REPLICA_ARGS \
