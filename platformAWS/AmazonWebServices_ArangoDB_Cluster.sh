@@ -143,42 +143,43 @@ fi
 
 #We have to keep all ami's up to date
 # Current Version: CoreOS 607.0.0
-# URL: https://coreos.com/docs/running-coreos/cloud-providers/ec2/
+# mop: updated 2016-02-08 CoreOS CoreOS 835.12.0
+# URL: https://coreos.com/os/docs/latest/booting-on-ec2.html
 
 if [ "$zone" == "eu-central-1" ]; then
-  IMAGE="ami-0e300d13"
+  IMAGE="ami-e8ebf384"
 fi
 
 if [ "$zone" == "ap-northeast-1" ]; then
-  IMAGE="ami-af28dcaf"
+  IMAGE="ami-673b0109"
 fi
 
 if [ "$zone" == "sa-east-1" ]; then
-  IMAGE="ami-2354ec3e"
+  IMAGE="ami-6c1a9a00"
 fi
 
 if [ "$zone" == "ap-southeast-2" ]; then
-  IMAGE="ami-b9b5c583"
+  IMAGE="ami-d0a783b3"
 fi
 
 if [ "$zone" == "ap-southeast-1" ]; then
-  IMAGE="mi-f80b3aaa"
+  IMAGE="ami-4a65aa29"
 fi
 
 if [ "$zone" == "us-east-1" ]; then
-  IMAGE="ami-323b195a"
+  IMAGE="ami-dfb699b5"
 fi
 
 if [ "$zone" == "us-west-2" ]; then
-  IMAGE="ami-0789a437"
+  IMAGE="ami-abc82ecb"
 fi
 
 if [ "$zone" == "us-west-1" ]; then
-  IMAGE="ami-8dd533c9"
+  IMAGE="ami-4d2d5b2d"
 fi
 
 if [ "$zone" == "eu-west-1" ]; then
-  IMAGE="ami-55950a22"
+  IMAGE="ami-1461d767"
 fi
 
 
@@ -337,7 +338,7 @@ function setMachineName () {
 function setMachineSecurity () {
   echo "Adding security groups."
   id=`cat "$OUTPUT/temp/IDS$i"`
-  secureid=`aws ec2 describe-security-groups --output json --group-names ${PREFIX}security |python -mjson.tool|grep GroupId| awk {'print $2'}| cut -c 2- | rev | cut -c 3- | rev`
+  secureid=$(aws ec2 describe-security-groups --output json --group-names ${PREFIX}security | grep GroupId | sed -e "s/.*: \"\([^\"]\+\).*/\1/g")
   aws ec2 modify-instance-attribute --instance-id "$id" --groups "$secureid"
 }
 
