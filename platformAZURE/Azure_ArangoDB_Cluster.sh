@@ -10,6 +10,12 @@
 #   OUTPUT  : local output log folder (e.g. -d /my/directory)
 #   SSH     : path to your already on Azure deployed ssh key (e.g. -s /my/directory/mykey)
 
+if [ platformAZURE/Azure_ArangoDB_Cluster.sh -nt ./Azure_ArangoDB_Cluster.sh ] || [ Docker/ArangoDBClusterWithDocker.sh -nt ./Azure_ArangoDB_Cluster.sh ] ; then
+  echo 'You almost certainly have forgotten to say "make" to assemble this'
+  echo 'script from its parts in subdirectories. Stopping.'
+  exit 1
+fi
+
 trap "kill 0" SIGINT
 
 ZONE="West US"

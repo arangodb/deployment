@@ -19,6 +19,12 @@
 
 #set -e
 
+if [ platformDO/DigitalOcean_ArangoDB_Cluster.sh -nt ./DigitalOcean_ArangoDB_Cluster.sh ] || [ Docker/ArangoDBClusterWithDocker.sh -nt ./DigitalOcean_ArangoDB_Cluster.sh ] ; then
+  echo 'You almost certainly have forgotten to say "make" to assemble this'
+  echo 'script from its parts in subdirectories. Stopping.'
+  exit 1
+fi
+
 trap "kill 0" SIGINT
 set -u
 

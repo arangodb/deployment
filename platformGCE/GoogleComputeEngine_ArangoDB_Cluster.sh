@@ -17,6 +17,12 @@
 #   NRDBSERVERS    : number of DBservers, defaults to $NUMBER
 #   NRCOORDINATORS : number of coordinators, defaults to $NUMBER
 
+if [ platformGCE/GoogleComputeEngine_ArangoDB_Cluster.sh -nt ./GoogleComputeEngine_ArangoDB_Cluster.sh ] || [ Docker/ArangoDBClusterWithDocker.sh -nt ./GoogleComputeEngine_ArangoDB_Cluster.sh ] ; then
+  echo 'You almost certainly have forgotten to say "make" to assemble this'
+  echo 'script from its parts in subdirectories. Stopping.'
+  exit 1
+fi
+
 trap "kill 0" SIGINT
 
 ZONE="europe-west1-b"

@@ -13,6 +13,12 @@
 #   NUMBER         : count of machines to create (e.g. -n 3)
 #   OUTPUT         : local output log folder (e.g. -d /my/directory)
 
+if [ platformGCE/GoogleComputeEngine_Mesos_Cluster.sh -nt ./GoogleComputeEngine_Mesos_Cluster.sh ] || [ Ubuntu/MesosClusterOnUbuntu.sh -nt ./GoogleComputeEngine_Mesos_Cluster.sh ] ; then
+  echo 'You almost certainly have forgotten to say "make" to assemble this'
+  echo 'script from its parts in subdirectories. Stopping.'
+  exit 1
+fi
+
 trap "kill 0" SIGINT
 
 ZONE="europe-west1-b"
