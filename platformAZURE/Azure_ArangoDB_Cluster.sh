@@ -12,11 +12,11 @@
 
 trap "kill 0" SIGINT
 
-ZONE="West US"
+ZONE="West Europe"
 MACHINE_TYPE="Medium"
 NUMBER="3"
 OUTPUT="azure"
-IMAGE="2b171e93f07c4903bcad35bda10acf22__CoreOS-Stable-607.0.0"
+IMAGE="2b171e93f07c4903bcad35bda10acf22__CoreOS-Stable-835.12.0"
 SSH_KEY_PATH=""
 DEFAULT_KEY_PATH="$OUTPUT/arangodb_azure_key"
 
@@ -165,7 +165,7 @@ then
     DEFAULT_KEY_PATH="$HOME/.ssh/arangodb_azure_key"
   else
     echo "No SSH-Key-Path given. Creating a new SSH-Key."
-    ssh-keygen -t dsa -f "$DEFAULT_KEY_PATH" -C "arangodb@arangodb.com"
+    ssh-keygen -t rsa -f "$DEFAULT_KEY_PATH" -C "arangodb@arangodb.com"
 
 #    openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout "$DEFAULT_KEY_PATH" -out "$DEFAULT_KEY_PATH.pem"
     openssl req -x509 -key "$DEFAULT_KEY_PATH" -nodes -days 365 -newkey rsa:2048 -out "${DEFAULT_KEY_PATH}.pem"
