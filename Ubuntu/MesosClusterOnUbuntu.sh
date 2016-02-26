@@ -85,8 +85,9 @@ service zookeeper restart
 echo zk://${SERVERS_INTERNAL_ARR[0]}:2181/mesos >/etc/mesos/zk
 echo "export MESOS_HOSTNAME=${SERVERS_INTERNAL_ARR[0]}" >>/etc/default/mesos-master
 echo "IP=${SERVERS_INTERNAL_ARR[0]}" >>/etc/default/mesos-master
-echo "export MESOS_ROLES=arangodb" >>/etc/default/mesos-master
-echo "export MESOS_WEIGHTS=arangodb=1" >>/etc/default/mesos-master
+# Taken out for Mesos >= 0.27:
+#echo "export MESOS_ROLES=arangodb" >>/etc/default/mesos-master
+#echo "export MESOS_WEIGHTS=arangodb=1" >>/etc/default/mesos-master
 service mesos-master restart
 echo "IP=${SERVERS_INTERNAL_ARR[0]}" >>/etc/default/mesos-slave
 echo "export MESOS_HOSTNAME=${SERVERS_INTERNAL_ARR[0]}" >>/etc/default/mesos-slave
