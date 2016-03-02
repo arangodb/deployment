@@ -1,16 +1,21 @@
-# This starts multiple coreos instances using amazon web services and then
+# This starts multiple ubuntu instances using VMWare vCloud Air and then
 # starts an ArangoDB cluster on them.
 #
 # Use -r to permanently remove an existing cluster and all machine instances.
 #
-# Optional prerequisites:
+# Prerequisites: TODO: FORCE CHECK THOSE VALUES, EXIT IF NOT FOUND
 # The following environment variables are used:
 #
-#   SIZE          : size/machine-type of the instance (e.g. -m n1-standard-2)
-#   NUMBER        : count of machines to create (e.g. -n 3)
 #   Local Network : name of the local network (e.g. -l local_net)
 #   Ext. Network  : name of the ext network (e.g. -e ext_net)
 #   External IP   : name of the ext network (e.g. -i 10.20.30.40)
+#
+# Optional prerequisites:
+# The following environment variables are used:
+#
+#   CPU     : cpus to use (e.g. -c 2)
+#   MEMORY  : memory to use (e.g. -m 1024)
+#   NUMBER  : count of machines to create (e.g. -n 3)
 #   OUTPUT  : local output log folder (e.g. -d /my/directory)
 
 if [ platformVCLOUD/VMWareVCloudAir_ArangoDB_Cluster.sh -nt ./vCloud_ArangoDB_Cluster.sh ] || [ Docker/ArangoDBClusterWithDocker.sh -nt ./vCloud_ArangoDB_Cluster.sh ] ; then
@@ -103,8 +108,8 @@ Use -r to permanently remove an existing cluster and all machine instances.
 Optional prerequisites:
 The following environment variables are used:
 
-  CPU    : size/machine-type of the instance (e.g. -c 2)
-  MEMORY    : size/machine-type of the instance (e.g. -m 2)
+  CPU     : size/machine-type of the instance (e.g. -c 2)
+  MEMORY  : size/machine-type of the instance (e.g. -m 2)
   NUMBER  : count of machines to create (e.g. -n 3)
   OUTPUT  : local output log folder (e.g. -d /my/directory)
 EOT
@@ -186,9 +191,9 @@ mkdir -p "$OUTPUT/temp"
 echo $PUBLICIP > "$OUTPUT/temp/EXTERNAL"
 
 if [[ -s "$HOME/.ssh/${PREFIX}vcloud-ssh-key" ]] ; then
-  echo "AWS SSH-Key existing."
+  echo "vCloud SSH-Key existing."
 else
-  echo "No AWS SSH-Key existing. Creating a new SSH-Key."
+  echo "No vCloud SSH-Key existing. Creating a new SSH-Key."
 
   ssh-keygen -t rsa -C "${PREFIX}vcloud-ssh-key" -f "$OUTPUT"/${PREFIX}vcloud-ssh-key
 
