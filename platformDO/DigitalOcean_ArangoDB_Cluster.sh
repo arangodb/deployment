@@ -198,7 +198,7 @@ if test -z "$SSHID";  then
 
   then
     echo "No ArangoDB SSH-Key found. Generating a new one.!"
-    ssh-keygen -t dsa -f $OUTPUT/$SSH_KEY -C "arangodb@arangodb.com"
+    ssh-keygen -t rsa -f $OUTPUT/$SSH_KEY -C "arangodb@arangodb.com"
 
     if [ $? -eq 0 ]; then
       echo OK
