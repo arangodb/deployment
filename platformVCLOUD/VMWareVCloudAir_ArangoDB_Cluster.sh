@@ -108,8 +108,8 @@ Use -r to permanently remove an existing cluster and all machine instances.
 Optional prerequisites:
 The following environment variables are used:
 
-  CPU     : size/machine-type of the instance (e.g. -c 2)
-  MEMORY  : size/machine-type of the instance (e.g. -m 2)
+  CPU     : cpus to use (e.g. -c 2)
+  MEMORY  : memory to use (e.g. -m 1024)
   NUMBER  : count of machines to create (e.g. -n 3)
   OUTPUT  : local output log folder (e.g. -d /my/directory)
 EOT
