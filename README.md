@@ -91,7 +91,7 @@ You will be asked for:
 
 ##### Create a cluster:
 ```sh
-$ wget wget https://raw.githubusercontent.com/ArangoDB/deployment/publish/AmazonWebServices_ArangoDB_Cluster.sh
+$ wget https://raw.githubusercontent.com/ArangoDB/deployment/publish/AmazonWebServices_ArangoDB_Cluster.sh
 $ chmod 755 AmazonWebServices_ArangoDB_Cluster.sh
 $ ./AmazonWebServices_ArangoDB_Cluster.sh
 ```
