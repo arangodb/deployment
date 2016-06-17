@@ -195,7 +195,7 @@ startArangoDBClusterWithDocker() {
     wait
 
     echo Starting agency...
-    until $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[0]} $SSH_SUFFIX "docker run --detach=true -p 4001:4001 -p 7001:7001 --name=agency -e "ETCD_NONO_WAL_SYNC=1" -v $AGENCY_DIR:/data ${DOCKER_IMAGE_NAME} /usr/lib/arangodb/etcd-arango --data-dir /data --listen-client-urls "http://0.0.0.0:4001" --listen-peer-urls "http://0.0.0.0:7001" --advertise-client-urls "http://${SERVERS_INTERNAL_ARR[0]}:4001" >/home/$SSH_USER/agency.log"
+    until $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[0]} $SSH_SUFFIX "docker run --detach=true -e ARANGO_NO_AUTH=1 -p 4001:8529 --name=agency -v $AGENCY_DIR:/var/lib/arangodb3 ${DOCKER_IMAGE_NAME}  --server.authentication false --agency.id 0 --agency.size 1 --javascript.v8-contexts 2"
     do
         echo "Error in remote docker run, retrying..."
     done
@@ -207,20 +207,16 @@ startArangoDBClusterWithDocker() {
         echo Starting DBserver on ${SERVERS_EXTERNAL_ARR[$i]}:$PORT_DBSERVER
 
         until $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[$i]} $SSH_SUFFIX \
-            docker run --detach=true -e ARANGO_NO_AUTH=1 -v $DBSERVER_DATA:/var/lib/arangodb \
-             -v $DBSERVER_LOGS:/logs --net=host \
+            docker run -p $PORT_DBSERVER:8529 --detach=true -e ARANGO_NO_AUTH=1 -v $DBSERVER_DATA:/var/lib/arangodb3 \
              --name=dbserver$PORT_DBSERVER ${DOCKER_IMAGE_NAME} \
-              arangod --frontend-version-check false \
-              --cluster.agency-endpoint tcp://${SERVERS_INTERNAL_ARR[0]}:4001 \
+              arangod --cluster.agency-endpoint tcp://${SERVERS_INTERNAL_ARR[0]}:4001 \
               --cluster.my-address tcp://${SERVERS_INTERNAL_ARR[$i]}:$PORT_DBSERVER \
-              --server.endpoint tcp://0.0.0.0:$PORT_DBSERVER \
               --cluster.my-local-info dbserver:${SERVERS_INTERNAL_ARR[$i]}:$PORT_DBSERVER \
               --cluster.my-role PRIMARY \
-              --dispatcher.report-interval 15 \
               --scheduler.threads 3 \
               --server.threads 5 \
-              $DBSERVER_ARGS \
-              >/dev/null
+              --javascript.v8-contexts 6 \
+              $DBSERVER_ARGS
         do
             echo "Error in remote docker run, retrying..."
         done
@@ -231,21 +227,18 @@ startArangoDBClusterWithDocker() {
         echo Starting Coordinator on ${SERVERS_EXTERNAL_ARR[$i]}:$PORT_COORDINATOR
 
         until $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[$i]} $SSH_SUFFIX \
-            docker run --detach=true -e ARANGO_NO_AUTH=1 -v $COORDINATOR_DATA:/var/lib/arangodb \
-                -v $COORDINATOR_LOGS:/logs --net=host \
+            docker run -p $PORT_COORDINATOR:8529 --detach=true -e ARANGO_NO_AUTH=1 -v $COORDINATOR_DATA:/var/lib/arangodb3 \
                 --name=coordinator$PORT_COORDINATOR \
                 ${DOCKER_IMAGE_NAME} \
               arangod --cluster.agency-endpoint tcp://${SERVERS_INTERNAL_ARR[0]}:4001 \
                --cluster.my-address tcp://${SERVERS_INTERNAL_ARR[$i]}:$PORT_COORDINATOR \
-               --server.endpoint tcp://0.0.0.0:$PORT_COORDINATOR \
                --cluster.my-local-info \
                          coordinator:${SERVERS_INTERNAL_ARR[$i]}:$PORT_COORDINATOR \
                --cluster.my-role COORDINATOR \
-               --dispatcher.report-interval 15 \
                --scheduler.threads 4 \
-               --server.threads 40 \
-               $COORDINATOR_ARGS \
-               >/dev/null
+               --javascript.v8-contexts 11 \
+               --server.threads 10 \
+               $COORDINATOR_ARGS
         do
             echo "Error in remote docker run, retrying..."
         done
@@ -278,81 +271,58 @@ startArangoDBClusterWithDocker() {
             fi
         done
     }
-
-    #for i in `seq 0 $LASTDBSERVER` ; do
-    #    testServer ${SERVERS_EXTERNAL_ARR[$i]}:$PORT_DBSERVER
-    #done
+    
+    DBSERVER_IDS=()
+    for i in `seq 0 $LASTDBSERVER` ; do
+        testServer ${SERVERS_EXTERNAL_ARR[$i]}:$PORT_DBSERVER
+        DBSERVER_IDS[$i]=$(curl http://"${SERVERS_EXTERNAL_ARR[$i]}:$PORT_DBSERVER"/_admin/server/id)
+    done
 
     for i in $COORDINATOR_MACHINES ; do
         testServer ${SERVERS_EXTERNAL_ARR[$i]}:$PORT_COORDINATOR
     done
-
-    echo Bootstrapping DBServers...
-    curl -s -X POST "http://${SERVERS_EXTERNAL_ARR[$FIRST_COORDINATOR]}:$PORT_COORDINATOR/_admin/cluster/bootstrapDbServers" \
-         -d '{"isRelaunch":false}' >/dev/null 2>&1
-
-    echo Running DB upgrade on cluster...
-    curl -s -X POST "http://${SERVERS_EXTERNAL_ARR[$FIRST_COORDINATOR]}:$PORT_COORDINATOR/_admin/cluster/upgradeClusterDatabase" \
-         -d '{"isRelaunch":false}' >/dev/null 2>&1
-
-    echo Bootstrapping Coordinators...
-    for i in $COORDINATOR_MACHINES ; do
-        echo Doing ${SERVERS_EXTERNAL_ARR[$i]}:$PORT_COORDINATOR
-        curl -s -X POST "http://${SERVERS_EXTERNAL_ARR[$i]}:$PORT_COORDINATOR/_admin/cluster/bootstrapCoordinator" \
-             -d '{"isRelaunch":false}' >/dev/null 2>&1 &
-    done
-
-    wait
-
+    
     if [ ! -z "$REPLICAS" ] ; then
         start_replica () {
             i=$1
             j=`expr $i + 1`
+            ID="Secondary$j"
             if [ $j -gt $LASTDBSERVER ] ; then
                 j=0
             fi
             echo Starting asynchronous replica for
             echo "  ${SERVERS_EXTERNAL_ARR[$i]}:$PORT_DBSERVER on ${SERVERS_EXTERNAL_ARR[$j]}:$PORT_REPLICA"
+            
+            while true; do
+              curl -f -X PUT --data "{\"primary\": \"${DBSERVER_IDS[$i]}\", \"oldSecondary\": \"none\", \"newSecondary\": \"${ID}\"}" -H "Content-Type: application/json" "${SERVERS_EXTERNAL_ARR[$i]}:$PORT_COORDINATOR"/_admin/cluster/replaceSecondary
+              if [ "$?" == "0" ]; then
+                break
+              fi
+              echo "Failed registering secondary...Retrying..."
+              sleep 1
+            done
 
             until $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[$j]} $SSH_SUFFIX \
-                docker run --detach=true -e ARANGO_NO_AUTH=1 -v $REPLICA_DATA:/var/lib/arangodb \
-                 -v $REPLICA_LOGS:/logs --net=host \
+                docker run -p 8529:$PORT_REPLICA --detach=true -e ARANGO_NO_AUTH=1 -v $REPLICA_DATA:/var/lib/arangodb3 \
                  --name=replica$PORT_REPLICA ${DOCKER_IMAGE_NAME} \
-                  arangod --frontend-version-check false \
-                  --server.endpoint tcp://0.0.0.0:$PORT_REPLICA \
+                  arangod \
+                  --cluster.my-id "$ID" \
                   --cluster.my-role SECONDARY \
-                  --dispatcher.report-interval 15 \
-                  --scheduler.threads 1 \
-                  --server.threads 2 \
-                  $REPLICA_ARGS \
-                  >/dev/null
+                  --scheduler.threads 3 \
+                  --server.threads 5 \
+                  --javascript.v8-contexts 6 \
+                  $REPLICA_ARGS
             do
                 echo "Error in remote docker run, retrying..."
             done
         }
 
         for i in `seq 0 $LASTDBSERVER` ; do
-            start_replica $i &
+            start_replica $i
         done
 
         echo Waiting 10 seconds till replicas are up and running...
         sleep 10
-
-        for i in `seq 0 $LASTDBSERVER` ; do
-            j=`expr $i + 1`
-            if [ $j -gt $LASTDBSERVER ] ; then
-                j=0
-            fi
-            echo Attaching replica on $j for $i ...
-            curl -s -X PUT "http://${SERVERS_EXTERNAL_ARR[$j]}:$PORT_REPLICA/_api/replication/applier-config" -d '{"endpoint":"tcp://'${SERVERS_INTERNAL_ARR[$i]}:$PORT_DBSERVER'","database":"_system","includeSystem":false}' --dump -
-            # >/dev/null 2>&1
-            TICK=`curl -X PUT "http://${SERVERS_EXTERNAL_ARR[$j]}:$PORT_REPLICA/_api/replication/sync" -d '{"endpoint":"tcp://'${SERVERS_INTERNAL_ARR[$i]}:$PORT_DBSERVER'"}' | sed -e 's/^.*lastLogTick":"\([0-9]*\)"}.*$/\1/'`
-            # >/dev/null 2>&1
-            curl -X PUT "http://${SERVERS_EXTERNAL_ARR[$j]}:$PORT_REPLICA/_api/replication/applier-start?from=$TICK" --dump - && echo
-            # >/dev/null 2>&1
-        done
-    wait
-        
     fi
 
     echo ""
