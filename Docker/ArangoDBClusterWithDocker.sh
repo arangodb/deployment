@@ -195,7 +195,7 @@ startArangoDBClusterWithDocker() {
     wait
 
     echo Starting agency...
-    until $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[0]} $SSH_SUFFIX "docker run --detach=true -e ARANGO_NO_AUTH=1 -p 4001:8529 --name=agency -v $AGENCY_DIR:/var/lib/arangodb3 ${DOCKER_IMAGE_NAME}  --server.authentication false --agency.id 0 --agency.size 1 --javascript.v8-contexts 2"
+    until $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[0]} $SSH_SUFFIX "docker run --detach=true -e ARANGO_NO_AUTH=1 -p 4001:8529 --name=agency -v $AGENCY_DIR:/var/lib/arangodb3 ${DOCKER_IMAGE_NAME} --agency.id 0 --agency.size 1 --javascript.v8-contexts 2 --agency.supervision true"
     do
         echo "Error in remote docker run, retrying..."
     done
