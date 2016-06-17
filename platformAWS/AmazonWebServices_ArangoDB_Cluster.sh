@@ -338,7 +338,7 @@ function setMachineName () {
 function setMachineSecurity () {
   echo "Adding security groups."
   id=`cat "$OUTPUT/temp/IDS$i"`
-  secureid=$(aws ec2 describe-security-groups --output json --group-names ${PREFIX}security | grep GroupId | sed -e "s/.*: \"\([^\"]\+\).*/\1/g")
+  secureid=$(aws ec2 describe-security-groups --output json --group-names ${PREFIX}security | grep GroupId | sed -e 's/.*: "\([^"]*\)"/\1/g')
   aws ec2 modify-instance-attribute --instance-id "$id" --groups "$secureid"
 }
 
