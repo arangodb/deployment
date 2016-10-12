@@ -3,7 +3,9 @@ Azure_ArangoDB_Cluster.sh
 DigitalOcean_ArangoDB_Cluster.sh
 GoogleComputeEngine_ArangoDB_Cluster.sh
 GoogleComputeEngine_Mesos_Cluster.sh
+vCloud_ArangoDB_Cluster.sh
 digital_ocean/
 azure/
 gce/
 aws/
+*.swp
