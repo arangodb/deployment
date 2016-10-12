@@ -49,7 +49,7 @@
 
 startArangoDBClusterWithDocker() {
 
-    DOCKER_IMAGE_NAME=m0ppers/arangodb:3.0
+    DOCKER_IMAGE_NAME=neunhoef/arangodb_cluster:2.6.dev-2.5
 
     # Two docker images are needed: 
     #  microbox/etcd for the agency and
@@ -196,28 +196,45 @@ startArangoDBClusterWithDocker() {
     wait
 
     echo Starting agency...
-    until $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[0]} $SSH_SUFFIX "docker run --detach=true -e ARANGO_NO_AUTH=1 -p 4001:8529 --name=agency -v $AGENCY_DIR:/var/lib/arangodb3 ${DOCKER_IMAGE_NAME} --agency.id 0 --agency.size 1 --javascript.v8-contexts 2 --agency.supervision true"
+    until $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[0]} $SSH_SUFFIX "docker run --detach=true -p 4001:4001 -p 7001:7001 --name=agency -e "ETCD_NONO_WAL_SYNC=1" -v $AGENCY_DIR:/data ${DOCKER_IMAGE_NAME} /usr/lib/arangodb/etcd-arango --data-dir /data --listen-client-urls "http://0.0.0.0:4001" --listen-peer-urls "http://0.0.0.0:7001" >/home/$SSH_USER/agency.log"
     do
         echo "Error in remote docker run, retrying..."
     done
 
     sleep 1
+    echo Initializing agency...
+    until $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[0]} $SSH_SUFFIX "docker run --link=agency:agency --rm ${DOCKER_IMAGE_NAME} arangosh --javascript.execute /scripts/init_agency.js > /home/$SSH_USER/init_agency.log"
+    do
+        echo "Error in remote docker run, retrying..."
+    done
+    echo Starting discovery...
+    until $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[0]} $SSH_SUFFIX "docker run --detach=true --link=agency:agency --name discovery ${DOCKER_IMAGE_NAME} arangosh --javascript.execute scripts/discover.js > /home/$SSH_USER/discovery.log"
+    do
+        echo "Error in remote docker run, retrying..."
+    done
 
     start_dbserver () {
         i=$1
         echo Starting DBserver on ${SERVERS_EXTERNAL_ARR[$i]}:$PORT_DBSERVER
 
         until $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[$i]} $SSH_SUFFIX \
-            docker run -p $PORT_DBSERVER:8529 --detach=true -e ARANGO_NO_AUTH=1 -v $DBSERVER_DATA:/var/lib/arangodb3 \
+            docker run --detach=true -v $DBSERVER_DATA:/data \
+             -v $DBSERVER_LOGS:/logs --net=host \
              --name=dbserver$PORT_DBSERVER ${DOCKER_IMAGE_NAME} \
-              arangod --cluster.agency-endpoint tcp://${SERVERS_INTERNAL_ARR[0]}:4001 \
+              arangod --database.directory /data \
+              --frontend-version-check false \
+              --cluster.agency-endpoint tcp://${SERVERS_INTERNAL_ARR[0]}:4001 \
               --cluster.my-address tcp://${SERVERS_INTERNAL_ARR[$i]}:$PORT_DBSERVER \
+              --server.endpoint tcp://0.0.0.0:$PORT_DBSERVER \
               --cluster.my-local-info dbserver:${SERVERS_INTERNAL_ARR[$i]}:$PORT_DBSERVER \
-              --cluster.my-role PRIMARY \
+              --log.file /logs/$PORT_DBSERVER.log \
+              --dispatcher.report-interval 15 \
+              --server.foxx-queues false \
+              --server.disable-statistics true \
               --scheduler.threads 3 \
               --server.threads 5 \
-              --javascript.v8-contexts 6 \
-              $DBSERVER_ARGS
+              $DBSERVER_ARGS \
+              >/dev/null
         do
             echo "Error in remote docker run, retrying..."
         done
@@ -228,18 +245,24 @@ startArangoDBClusterWithDocker() {
         echo Starting Coordinator on ${SERVERS_EXTERNAL_ARR[$i]}:$PORT_COORDINATOR
 
         until $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[$i]} $SSH_SUFFIX \
-            docker run -p $PORT_COORDINATOR:8529 --detach=true -e ARANGO_NO_AUTH=1 -v $COORDINATOR_DATA:/var/lib/arangodb3 \
+            docker run --detach=true -v $COORDINATOR_DATA:/data \
+                -v $COORDINATOR_LOGS:/logs --net=host \
                 --name=coordinator$PORT_COORDINATOR \
                 ${DOCKER_IMAGE_NAME} \
-              arangod --cluster.agency-endpoint tcp://${SERVERS_INTERNAL_ARR[0]}:4001 \
+              arangod --database.directory /data \
+               --cluster.agency-endpoint tcp://${SERVERS_INTERNAL_ARR[0]}:4001 \
                --cluster.my-address tcp://${SERVERS_INTERNAL_ARR[$i]}:$PORT_COORDINATOR \
+               --server.endpoint tcp://0.0.0.0:$PORT_COORDINATOR \
                --cluster.my-local-info \
                          coordinator:${SERVERS_INTERNAL_ARR[$i]}:$PORT_COORDINATOR \
-               --cluster.my-role COORDINATOR \
+               --log.file /logs/$PORT_COORDINATOR.log \
+               --dispatcher.report-interval 15 \
+               --server.foxx-queues false \
+               --server.disable-statistics true \
                --scheduler.threads 4 \
-               --javascript.v8-contexts 11 \
-               --server.threads 10 \
-               $COORDINATOR_ARGS
+               --server.threads 40 \
+               $COORDINATOR_ARGS \
+               >/dev/null
         do
             echo "Error in remote docker run, retrying..."
         done
@@ -272,58 +295,84 @@ startArangoDBClusterWithDocker() {
             fi
         done
     }
-    
-    DBSERVER_IDS=()
-    for i in `seq 0 $LASTDBSERVER` ; do
-        testServer ${SERVERS_EXTERNAL_ARR[$i]}:$PORT_DBSERVER
-        DBSERVER_IDS[$i]=$(curl http://"${SERVERS_EXTERNAL_ARR[$i]}:$PORT_DBSERVER"/_admin/server/id)
-    done
+
+    #for i in `seq 0 $LASTDBSERVER` ; do
+    #    testServer ${SERVERS_EXTERNAL_ARR[$i]}:$PORT_DBSERVER
+    #done
 
     for i in $COORDINATOR_MACHINES ; do
         testServer ${SERVERS_EXTERNAL_ARR[$i]}:$PORT_COORDINATOR
     done
-    
+
+    echo Bootstrapping DBServers...
+    curl -s -X POST "http://${SERVERS_EXTERNAL_ARR[$FIRST_COORDINATOR]}:$PORT_COORDINATOR/_admin/cluster/bootstrapDbServers" \
+         -d '{"isRelaunch":false}' >/dev/null 2>&1
+
+    echo Running DB upgrade on cluster...
+    curl -s -X POST "http://${SERVERS_EXTERNAL_ARR[$FIRST_COORDINATOR]}:$PORT_COORDINATOR/_admin/cluster/upgradeClusterDatabase" \
+         -d '{"isRelaunch":false}' >/dev/null 2>&1
+
+    echo Bootstrapping Coordinators...
+    for i in $COORDINATOR_MACHINES ; do
+        echo Doing ${SERVERS_EXTERNAL_ARR[$i]}:$PORT_COORDINATOR
+        curl -s -X POST "http://${SERVERS_EXTERNAL_ARR[$i]}:$PORT_COORDINATOR/_admin/cluster/bootstrapCoordinator" \
+             -d '{"isRelaunch":false}' >/dev/null 2>&1 &
+    done
+
+    wait
+
     if [ ! -z "$REPLICAS" ] ; then
         start_replica () {
             i=$1
             j=`expr $i + 1`
-            ID="Secondary$j"
             if [ $j -gt $LASTDBSERVER ] ; then
                 j=0
             fi
             echo Starting asynchronous replica for
             echo "  ${SERVERS_EXTERNAL_ARR[$i]}:$PORT_DBSERVER on ${SERVERS_EXTERNAL_ARR[$j]}:$PORT_REPLICA"
-            
-            while true; do
-              curl -f -X PUT --data "{\"primary\": \"${DBSERVER_IDS[$i]}\", \"oldSecondary\": \"none\", \"newSecondary\": \"${ID}\"}" -H "Content-Type: application/json" "${SERVERS_EXTERNAL_ARR[$i]}:$PORT_COORDINATOR"/_admin/cluster/replaceSecondary
-              if [ "$?" == "0" ]; then
-                break
-              fi
-              echo "Failed registering secondary...Retrying..."
-              sleep 1
-            done
 
             until $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[$j]} $SSH_SUFFIX \
-                docker run -p 8529:$PORT_REPLICA --detach=true -e ARANGO_NO_AUTH=1 -v $REPLICA_DATA:/var/lib/arangodb3 \
+                docker run --detach=true -v $REPLICA_DATA:/data \
+                 -v $REPLICA_LOGS:/logs --net=host \
                  --name=replica$PORT_REPLICA ${DOCKER_IMAGE_NAME} \
-                  arangod \
-                  --cluster.my-id "$ID" \
-                  --cluster.my-role SECONDARY \
-                  --scheduler.threads 3 \
-                  --server.threads 5 \
-                  --javascript.v8-contexts 6 \
-                  $REPLICA_ARGS
+                  arangod --database.directory /data \
+                  --frontend-version-check false \
+                  --server.endpoint tcp://0.0.0.0:$PORT_REPLICA \
+                  --log.file /logs/$PORT_REPLICA.log \
+                  --dispatcher.report-interval 15 \
+                  --server.foxx-queues false \
+                  --server.disable-statistics true \
+                  --scheduler.threads 1 \
+                  --server.threads 2 \
+                  $REPLICA_ARGS \
+                  >/dev/null
             do
                 echo "Error in remote docker run, retrying..."
             done
         }
 
         for i in `seq 0 $LASTDBSERVER` ; do
-            start_replica $i
+            start_replica $i &
         done
 
         echo Waiting 10 seconds till replicas are up and running...
         sleep 10
+
+        for i in `seq 0 $LASTDBSERVER` ; do
+            j=`expr $i + 1`
+            if [ $j -gt $LASTDBSERVER ] ; then
+                j=0
+            fi
+            echo Attaching replica on $j for $i ...
+            curl -s -X PUT "http://${SERVERS_EXTERNAL_ARR[$j]}:$PORT_REPLICA/_api/replication/applier-config" -d '{"endpoint":"tcp://'${SERVERS_INTERNAL_ARR[$i]}:$PORT_DBSERVER'","database":"_system","includeSystem":false}' --dump -
+            # >/dev/null 2>&1
+            TICK=`curl -X PUT "http://${SERVERS_EXTERNAL_ARR[$j]}:$PORT_REPLICA/_api/replication/sync" -d '{"endpoint":"tcp://'${SERVERS_INTERNAL_ARR[$i]}:$PORT_DBSERVER'"}' | sed -e 's/^.*lastLogTick":"\([0-9]*\)"}.*$/\1/'`
+            # >/dev/null 2>&1
+            curl -X PUT "http://${SERVERS_EXTERNAL_ARR[$j]}:$PORT_REPLICA/_api/replication/applier-start?from=$TICK" --dump - && echo
+            # >/dev/null 2>&1
+        done
+    wait
+        
     fi
 
     echo ""
@@ -343,47 +392,58 @@ startArangoDBClusterWithDocker() {
     echo ""
 }
 
-# This starts multiple coreos instances using the digital ocean cloud platform
-# and then starts an ArangoDB cluster on them.
+# This starts multiple coreos instances using amazon web services and then
+# starts an ArangoDB cluster on them.
 #
 # Use -r to permanently remove an existing cluster and all machine instances.
 #
-# Prerequisites:
-# The following environment variables are used:
-#   TOKEN  : digital ocean api-token (as environment variable)
-#
 # Optional prerequisites:
-#   REGION : site of the server (e.g. -z nyc3)
-#   SIZE   : size/machine-type of the instance (e.g. -m 512mb)
-#   NUMBER : count of machines to create (e.g. -n 3)
-#   OUTPUT : local output log folder (e.g. -d /my/directory)
-#   SSHID  : id of your existing ssh keypair. if no id is set, a new
-#            keypair will be generated and transfered to your created
-#            instance (e.g. -s 123456)
-#   PREFIX : prefix for your machine names (e.g. "export PREFIX="arangodb-test-$$-")
+# The following environment variables are used:
+#
+#   SIZE          : size/machine-type of the instance (e.g. -m n1-standard-2)
+#   NUMBER        : count of machines to create (e.g. -n 3)
+#   Local Network : name of the local network (e.g. -l local_net)
+#   Ext. Network  : name of the ext network (e.g. -e ext_net)
+#   External IP   : name of the ext network (e.g. -i 10.20.30.40)
+#   OUTPUT  : local output log folder (e.g. -d /my/directory)
 
-#set -e
+if [ platformVCLOUD/VMWareVCloudAir_ArangoDB_Cluster.sh -nt ./vCloud_ArangoDB_Cluster.sh ] || [ Docker/ArangoDBClusterWithDocker.sh -nt ./vCloud_ArangoDB_Cluster.sh ] ; then
+  echo 'You almost certainly have forgotten to say "make" to assemble this'
+  echo 'script from its parts in subdirectories. Stopping.'
+  exit 1
+fi
 
 trap "kill 0" SIGINT
-set -u
 
-REGION="ams3"
-SIZE="4gb"
-NUMBER="3"
-OUTPUT="digital_ocean"
-IMAGE="coreos-stable"
-SSHID=""
+#Current Public Catalog images available
+# vca catalog
+
+MEMORY="1024"
+CPU="2"
+NUMBER="2"
+OUTPUT="vCloud"
+PUBLICIP=""
+ORG=""
+INSTANCE=""
+EXTERNALNET=""
+LOCALNET=""
+SSH_KEY_PATH=""
 
 function deleteMachine () {
   echo "deleting machine $PREFIX$1"
-  id=${SERVERS_IDS_ARR[`expr $1 - 1`]}
+  vapp=${SERVERS_VAPPS_ARR[`expr $1 - 1`]}
 
-  CURL=`curl --request DELETE "https://api.digitalocean.com/v2/droplets/$id" \
-       --header "Content-Type: application/json" \
-       --header "Authorization: Bearer $TOKEN" 2>/dev/null`
+  vca vapp delete --vapp "$vapp"
+
+  if [ $? -eq 0 ]; then
+    echo "OK: Deleted instance $vapp"
+  else
+    echo "ERROR: instance $vapp could not be deleted."
+  fi
 }
 
-DigitalOceanDestroyMachines() {
+vCloudDestroyMachines() {
+
     if [ ! -e "$OUTPUT" ] ;  then
       echo "$0: directory '$OUTPUT' not found"
       exit 1
@@ -391,27 +451,22 @@ DigitalOceanDestroyMachines() {
 
     . $OUTPUT/clusterinfo.sh
 
-    declare -a SERVERS_IDS_ARR=(${SERVERS_IDS[@]})
+    declare -a SERVERS_VAPPS_ARR=(${SERVERS_VAPPS[@]})
 
-    NUMBER=${#SERVERS_IDS_ARR[@]}
+    NUMBER=${#SERVERS_VAPPS_ARR[@]}
 
     echo "NUMBER OF MACHINES: $NUMBER"
     echo "OUTPUT DIRECTORY: $OUTPUT"
     echo "MACHINE PREFIX: $PREFIX"
 
-    if test -z "$TOKEN";  then
-      echo "$0: you must supply a token as environment variable with 'export TOKEN='your_token''"
-      exit 1
-    fi
-
-    export CLOUDSDK_CONFIG="$OUTPUT/digital_ocean"
-    touch $OUTPUT/hosts
-    touch $OUTPUT/curl.log
-    CURL=""
-
     for i in `seq $NUMBER`; do
       deleteMachine $i &
     done
+
+    wait
+
+    # delete network rules TODO: really delete all rules?
+    vca nat delete -a
 
     wait
 
@@ -428,59 +483,52 @@ DigitalOceanDestroyMachines() {
     exit 0
 }
 
-#COREOS PARAMS
-declare -a SERVERS_EXTERNAL_DO
-declare -a SERVERS_INTERNAL_DO
-declare -a SERVERS_IDS_DO
-
-SSH_USER="core"
-SSH_KEY="arangodb_do_key"
-SSH_CMD="ssh"
-SSH_SUFFIX="-i $HOME/.ssh/arangodb_do_key -l $SSH_USER"
-
 REMOVE=0
 
-while getopts ":z:m:n:d:s:hr" opt; do
+while getopts ":l:e:i:c:m:n:d:s:hr" opt; do
   case $opt in
     h)
-      cat <<EOT
-This starts multiple coreos instances using the digital ocean cloud platform
+       cat <<EOT
+This starts multiple ubuntu instances using VMWare vCloud Air and then
+starts an ArangoDB cluster on them.
 
 Use -r to permanently remove an existing cluster and all machine instances.
 
-Prerequisites:
-The following environment variables are used:
-  TOKEN  : digital ocean api-token (as environment variable)
-
 Optional prerequisites:
-  REGION : site of the server (e.g. -z nyc3)
-  SIZE   : size/machine-type of the instance (e.g. -m 512mb)
-  NUMBER : count of machines to create (e.g. -n 3)
-  OUTPUT : local output log folder (e.g. -d /my/directory)
-  SSHID  : id of your existing ssh keypair. if no id is set, a new
-           keypair will be generated and transfered to your created
-           instance (e.g. -s 123456)
-  PREFIX : prefix for your machine names (e.g. "export PREFIX="arangodb-test-$$-")
+The following environment variables are used:
+
+  CPU    : size/machine-type of the instance (e.g. -c 2)
+  MEMORY    : size/machine-type of the instance (e.g. -m 2)
+  NUMBER  : count of machines to create (e.g. -n 3)
+  OUTPUT  : local output log folder (e.g. -d /my/directory)
 EOT
-      exit 0
       ;;
-    z)
-      REGION="$OPTARG"
-      ;;
-    m)
-      SIZE="$OPTARG"
+    c)
+      CPU="$OPTARG"
       ;;
     n)
       NUMBER="$OPTARG"
       ;;
+    i)
+      PUBLICIP="$OPTARG"
+      ;;
+    e)
+      EXTERNALNET="$OPTARG"
+      ;;
+    l)
+      LOCALNET="$OPTARG"
+      ;;
+    m)
+      MEMORY="$OPTARG"
+      ;;
     d)
       OUTPUT="$OPTARG"
       ;;
+    s)
+      SSH_KEY_PATH="$OPTARG"
+      ;;
     r)
       REMOVE=1
-      ;;
-    s)
-      SSHID="$OPTARG"
       ;;
     \?)
       echo "Invalid option: -$OPTARG" >&2
@@ -494,12 +542,21 @@ EOT
 done
 
 PREFIX="arangodb-test-$$-"
+echo "OUTPUT DIRECTORY: $OUTPUT"
 
-: ${TOKEN?"You must supply a token as environment variable with 'export TOKEN='your_token'"}
+DEFAULT_KEY_PATH="$HOME/.ssh/${PREFIX}vcloud-ssh-key"
+
+#We have to keep all images up to date
+# Current Version: UbuntuServer12.04LTS(amd6420150127)
+# Catalog: vca catalog
+
+#IMAGE="UbuntuServer12.04LTS(amd6420150127)"
+# get the latest ubuntu amd64 image id
+IMAGE=`vca catalog | grep -E 'UbuntuServer.*amd64.*' |awk '{print $5}'`
 
 if test -e "$OUTPUT";  then
   if [ "$REMOVE" == "1" ] ; then
-    DigitalOceanDestroyMachines
+    vCloudDestroyMachines
     exit 0
   fi
 
@@ -512,204 +569,115 @@ if [ "$REMOVE" == "1" ] ; then
   exit 1
 fi
 
-echo "REGION: $REGION"
-echo "SIZE: $SIZE"
+echo "CPUs: $CPU"
+echo "MEMORY: $MEMORY"
 echo "NUMBER OF MACHINES: $NUMBER"
-echo "OUTPUT DIRECTORY: $OUTPUT"
 echo "MACHINE PREFIX: $PREFIX"
 
-wget -q --tries=10 --timeout=20 --spider http://google.com
-if [[ $? -eq 0 ]]; then
-        echo ""
-else
-        echo "No internet connection. Exiting."
-        exit 1
-fi
-
 mkdir -p "$OUTPUT/temp"
+      
+#write external ip address to file
+echo $PUBLICIP > "$OUTPUT/temp/EXTERNAL"
 
-if test -z "$SSHID";  then
+if [[ -s "$HOME/.ssh/${PREFIX}vcloud-ssh-key" ]] ; then
+  echo "AWS SSH-Key existing."
+else
+  echo "No AWS SSH-Key existing. Creating a new SSH-Key."
 
-  BOOL=0
-  COUNTER=0
+  ssh-keygen -t rsa -C "${PREFIX}vcloud-ssh-key" -f "$OUTPUT"/${PREFIX}vcloud-ssh-key
 
-  if [ ! -f $HOME/.ssh/arangodb_do_key.pub ];
-
-  then
-    echo "No ArangoDB SSH-Key found. Generating a new one.!"
-    ssh-keygen -t rsa -f $OUTPUT/$SSH_KEY -C "arangodb@arangodb.com"
-
-    if [ $? -eq 0 ]; then
-      echo OK
-    else
-      echo Failed to create SSH-Key. Exiting.
-      exit 1
-    fi
-
-    cp $OUTPUT/$SSH_KEY* $HOME/.ssh/
-
-    SSHPUB=`cat $HOME/.ssh/arangodb_do_key.pub`
-
-    echo Deploying ssh keypair on digital ocean.
-    CURL=`curl -s -S -D $OUTPUT/temp/header -X POST -H 'Content-Type: application/json' \
-         -H "Authorization: Bearer $TOKEN" \
-         -d "{\"name\":\"arangodb\",\"public_key\":\"$SSHPUB\"}" "https://api.digitalocean.com/v2/account/keys"`
-
-    if [[ -s "$OUTPUT/temp/header" ]] ; then
-      echo "Deployment of new ssh key successful."
-      > $OUTPUT/temp/header
-    else
-      echo "Could not deploy keys. Exiting."
-      exit 1
-    fi ;
-
-    SSHID=`echo $CURL | python -mjson.tool | grep "\"id\"" | awk '{print $2}' | rev | cut -c 2- | rev`
-
+  if [ $? -eq 0 ]; then
+    echo OK
   else
-
-    echo "ArangoDB SSH-Key found. Try to use $HOME/.ssh/arangodb_do_key.pub"
-    LOCAL_KEY=`cat $HOME/.ssh/arangodb_do_key.pub | awk '{print $2}'`
-    DOKEYS=`curl -D $OUTPUT/temp/header -s -S -X GET -H 'Content-Type: application/json' \
-           -H "Authorization: Bearer $TOKEN" "https://api.digitalocean.com/v2/account/keys"`
-
-    if [[ -s "$OUTPUT/temp/header" ]] ; then
-      echo "Fetched deposited keys from digital ocean."
-      > $OUTPUT/temp/header
-    else
-      echo "Could not fetch deposited keys from digital ocean. Exiting."
-      exit 1
-    fi ;
-
-    echo $DOKEYS | python -mjson.tool | grep "\"public_key\"" | awk '{print $3}' > "$OUTPUT/temp/do_keys"
-    echo $DOKEYS | python -mjson.tool | grep "\"id\"" | awk '{print $2}' | rev | cut -c 2- | rev > $OUTPUT/temp/do_keys_ids
-
-    while read line
-      do
-        COUNTER=$[COUNTER + 1]
-
-        if [ "$line" = "$LOCAL_KEY" ]
-          then
-              BOOL=1
-            break;
-        fi
-
-    done < "$OUTPUT/temp/do_keys"
-
+    echo Failed to create SSH-Key. Exiting.
+    exit 1
   fi
 
-  if [ "$BOOL" -eq 1 ];
+  cp "$OUTPUT/${PREFIX}vcloud-ssh-key"* "$HOME/.ssh/"
+  chmod 400 "$HOME"/.ssh/${PREFIX}vcloud-ssh-key
 
-    then
-      echo "SSH-Key is valid and already stored at digital ocean."
-      SSHID=$(sed -n "${COUNTER}p" "$OUTPUT/temp/do_keys_ids")
-
-    else
-      echo "Your stored SSH-Key is not deployed."
-
-        SSHPUB=`cat $HOME/.ssh/arangodb_do_key.pub`
-        echo Deploying ssh keypair on digital ocean.
-          CURL=`curl -s -S -D $OUTPUT/temp/header --request POST -H 'Content-Type: application/json' \
-            -H "Authorization: Bearer $TOKEN" \
-            -d "{\"name\":\"arangodb\",\"public_key\":\"$SSHPUB\"}" "https://api.digitalocean.com/v2/account/keys"`
-
-        if [[ -s "$OUTPUT/temp/header" ]] ; then
-          echo "Deployment of SSH-Key finished."
-          > $OUTPUT/temp/header
-        else
-          echo "Could not deploy SSH-Key. Exiting."
-          exit 1
-        fi ;
-
-        SSHID=`echo $CURL | python -mjson.tool | grep "\"id\"" | awk '{print $2}' | rev | cut -c 2- | rev`
-
-  fi
-
-fi
-
-wait
+fi ;
 
 #check if ssh agent is running
 if [ -n "${SSH_AUTH_SOCK}" ]; then
     echo "SSH-Agent is running."
 
     #check if key already added to ssh agent
-    if ssh-add -l | grep arangodb_do_key > /dev/null ; then
+    if ssh-add -l | grep $DEFAULT_KEY_PATH > /dev/null ; then
       echo SSH-Key already added to SSH-Agent;
     else
-      ssh-add $HOME/.ssh/arangodb_do_key
+      ssh-add "$DEFAULT_KEY_PATH"
     fi
 
   else
     echo "No SSH-Agent running. Skipping."
-
 fi
 
-export CLOUDSDK_CONFIG="$OUTPUT/digital_ocean"
-touch $OUTPUT/hosts
-touch $OUTPUT/curl.log
-CURL=""
+wait
+
+# vcloud machine ready
+# status = Powered off , in progress = Unresolved
+function getMachine () {
+  status=`vca vapp | grep "$PREFIX$1"-vapp |awk '{print $6}'`
+  state=0
+
+  while [ "$state" == 0 ]; do
+    if [ "$status" == "Unresolved" ]; then
+     echo "Machine $PREFIX$1 not ready yet."
+     sleep 3
+    else
+     echo "Machine $PREFIX$1 ready."
+
+     #get vm ip address
+     priv=`vca vm --vapp "$PREFIX$1"-vapp |grep "$PREFIX$1"-vapp |awk '{print $9}'`
+     echo $priv > "$OUTPUT/temp/INTERNAL$1"
+
+     state=1
+    fi
+  done
+
+}
 
 function createMachine () {
-  echo "creating machine $PREFIX$1"
+  echo "creating machine $PREFIX$1"-vm
 
-  CURL=`curl -s -S -D $OUTPUT/temp/header$1 --request POST "https://api.digitalocean.com/v2/droplets" \
-       --header "Content-Type: application/json" \
-       --header "Authorization: Bearer $TOKEN" \
-       --data "{\"region\":\"$REGION\", \"image\":\"$IMAGE\", \"size\":\"$SIZE\", \"name\":\"$PREFIX$1\", \"ssh_keys\":[\"$SSHID\"], \"private_networking\":\"true\" }" 2>>$OUTPUT/curl.error`
+  INSTANCE=`vca vapp create -a "$PREFIX$1"-vapp -V "$PREFIX$1"-vm -c 'Public Catalog' -t "$IMAGE" \
+  -n "$LOCALNET" -m POOL --cpu "$CPU" --ram "$MEMORY"`
 
-  if [[ -s "$OUTPUT/temp/header$1" ]] ; then
-    echo "Machine $PREFIX$1 created."
-    > $OUTPUT/temp/header$1
-  else
-    echo "Could not create machine $PREFIX$1. Exiting."
-    exit 1
-  fi ;
-
-  to_file=`echo $CURL | python -mjson.tool | grep "\"id\"" | head -n 1 | awk '{print $2}' | rev | cut -c 2- | rev`
-  echo $to_file > "$OUTPUT/temp/INSTANCEID$1"
+  echo "$PREFIX$1"-vapp > "$OUTPUT/temp/VAPP$1"
+  echo "$PREFIX$1"-vm > "$OUTPUT/temp/VM$1"
 }
 
-function getMachine () {
-  id=`cat $OUTPUT/temp/INSTANCEID$i`
-
-  #while loop until ip addresses are fetched successfully
-
-  while :
-  do
-
-    if [[ -s "$OUTPUT/temp/INTERNAL$1" ]] ; then
-      echo "Machine information from $PREFIX$1 fetched."
-      break
-    else
-      RESULT2=`curl -s -S -D $OUTPUT/temp/header$1 -X GET -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" \
-                              "https://api.digitalocean.com/v2/droplets/$id" 2>>$OUTPUT/curl.error`
-
-      echo $RESULT2 >> $OUTPUT/curl.log
-
-      if [[ -s "$OUTPUT/temp/header$1" ]] ; then
-        echo "Getting status information from machine: $PREFIX$1."
-        > $OUTPUT/temp/header$1
-      else
-        echo "Could not fetch machine information from $PREFIX$1. Exiting."
-        exit 1
-      fi ;
-
-      a=`echo $RESULT2 | python -mjson.tool | grep "\"ip_address\"" | head -n 1 | awk '{print $2}' | cut -c 2- | rev | cut -c 3- | rev`
-      b=`echo $RESULT2 | python -mjson.tool | grep "\"ip_address\"" | head -n 2 | tail -1 |awk '{print $2}' | cut -c 2- | rev | cut -c 3- | rev`
-
-      if [ -n "$a" ]; then
-        echo $a > "$OUTPUT/temp/INTERNAL$1"
-      fi
-      if [ -n "$b" ]; then
-        echo $b > "$OUTPUT/temp/EXTERNAL$1"
-      fi
-    fi ;
-
-    sleep 2
-
-  done
+function deployKeysOnMachines () {
+  echo "Deploying and starting ssh keys. Machine: $PREFIX$1."
+  vca vapp customize --vapp "$PREFIX$1"-vapp --vm "$PREFIX$1"-vm --file "$OUTPUT/temp/deploy_ssh.sh"
 }
 
+function waitForStartup () {
+  #TODO: is docker script waiting? or do we need to wait here?
+  echo "Waiting for machines..."
+  sleep 10
+}
+
+function configureNetworkOnMachines () {
+
+  #TODO: how to generate the number for ssh ports? atm it is just starting at 400 and adding +1 for every machine
+
+  port=`echo $[(400) + $1]`
+  echo "$port" > "$OUTPUT/temp/PORT$1"
+  echo "Adding SSH network rules to machine: $PREFIX$1 with port $port"
+  localip=`cat "$OUTPUT/temp/INTERNAL$i"`
+  vca nat add --type DNAT --original-ip "$PUBLICIP" --original-port "$port" --translated-ip "$localip" --translated-port 22 --protocol tcp --network "$EXTERNALNET"
+}
+
+declare -a SERVERS_EXTERNAL_VCLOUD
+declare -a SERVERS_INTERNAL_VCLOUD
+declare -a SERVERS_VMS_VCLOUD
+declare -a SERVERS_VAPPS_VCLOUD
+declare -a SERVERS_PORTS_VCLOUD
+
+SSH_USER="ubuntu"
+SSH_CMD="ssh"
 
 for i in `seq $NUMBER`; do
   createMachine $i &
@@ -717,8 +685,49 @@ done
 
 wait
 
+sleep 5
+
 for i in `seq $NUMBER`; do
   getMachine $i &
+done
+
+wait
+
+# read public key to string
+PUBKEY=`cat "$OUTPUT/${PREFIX}vcloud-ssh-key.pub"`
+
+# create deploy ssh script
+echo "#!/bin/bash" > "$OUTPUT/temp/deploy_ssh.sh"
+echo "mkdir -p /home/ubuntu/.ssh" >> "$OUTPUT/temp/deploy_ssh.sh"
+echo "echo $PUBKEY >> /home/ubuntu/.ssh/authorized_keys" >> "$OUTPUT/temp/deploy_ssh.sh"
+echo "chown ubuntu.ubuntu /home/ubuntu/.ssh" >> "$OUTPUT/temp/deploy_ssh.sh"
+echo "chown ubuntu.ubuntu /home/ubuntu/.ssh/authorized_keys" >> "$OUTPUT/temp/deploy_ssh.sh"
+echo "chmod go-rwx /home/ubuntu/.ssh" >> "$OUTPUT/temp/deploy_ssh.sh"
+echo "chmod go-rwx /home/ubuntu/.ssh/authorized_keys" >> "$OUTPUT/temp/deploy_ssh.sh"
+
+#set execution rights on sh file
+chmod a+x "$OUTPUT/temp/deploy_ssh.sh"
+
+wait
+
+for i in `seq $NUMBER`; do
+  #configureNetworkOnMachines $i &
+
+  echo "Creating network rules for machine $PREFIX$i"
+  #vmware does not like creating network rules in parallel
+  configureNetworkOnMachines $i
+done
+
+wait
+
+for i in `seq $NUMBER`; do
+  deployKeysOnMachines $i &
+done
+
+wait
+
+for i in `seq $NUMBER`; do
+  waitForStartup $i &
 done
 
 wait
@@ -731,10 +740,13 @@ do
   for i in `seq $NUMBER`; do
 
     if [ -s "$OUTPUT/temp/INTERNAL$i" ] ; then
-      echo "Machine $PREFIX$i finished"
+      SERVERS_INTERNAL_VCLOUD[`expr $i - 1`]=`cat "$OUTPUT/temp/INTERNAL$i"`
+      SERVERS_EXTERNAL_VCLOUD=`cat "$OUTPUT/temp/EXTERNAL"`
+      SERVERS_VMS_VCLOUD[`expr $i - 1`]=`cat "$OUTPUT/temp/VM$i"`
+      SERVERS_VAPP_VCLOUD[`expr $i - 1`]=`cat "$OUTPUT/temp/VAPP$i"`
+      SERVERS_PORTS_VCLOUD[`expr $i - 1`]=`cat "$OUTPUT/temp/PORT$i"`
       FINISHED=1
     else
-      echo "Machine $PREFIX$i not ready yet."
       FINISHED=0
       break
     fi
@@ -750,57 +762,29 @@ do
 
 done
 
-wait
-
-
-#Wait until machines are ready.
-#while :
-#do
-#   firstid=`cat $OUTPUT/temp/INSTANCEID$i`
-#   RESULT=`curl -s -S -X GET -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" \
-#                   "https://api.digitalocean.com/v2/droplets/$firstid" 2>/dev/null`
-#   CHECK=`echo $RESULT | python -mjson.tool | grep "\"id\"" | head -n 1 | awk '{print $2}' | rev | cut -c 2- | rev`
-#
-#   if [ "$CHECK" != "not_found" ];
-#   then
-#     echo ready: droplets now online.
-#     break;
-#   else
-#     echo waiting: droplets not ready yet...
-#   fi
-#
-#done
-#wait
-
-for i in `seq $NUMBER`; do
-  a=`cat $OUTPUT/temp/INTERNAL$i`
-  b=`cat $OUTPUT/temp/EXTERNAL$i`
-  id=`cat $OUTPUT/temp/INSTANCEID$i`
-  SERVERS_INTERNAL_DO[`expr $i - 1`]="$a"
-  SERVERS_EXTERNAL_DO[`expr $i - 1`]="$b"
-  SERVERS_IDS_DO[`expr $i - 1`]="$id"
-
-done
-
 rm -rf $OUTPUT/temp
 
-echo Internal IPs: ${SERVERS_INTERNAL_DO[@]}
-echo External IPs: ${SERVERS_EXTERNAL_DO[@]}
-echo IDs         : ${SERVERS_IDS_DO[@]}
+echo Internal IPs: ${SERVERS_INTERNAL_VCLOUD[@]}
+echo External IP: $PUBLICIP
+echo VMs         : ${SERVERS_VMS_VCLOUD[@]}
+echo VAPPs       : ${SERVERS_VAPP_VCLOUD[@]}
+echo PORTS       : ${SERVERS_PORTS_VCLOUD[@]}
 
-echo Remove host key entries in ~/.ssh/known_hosts...
-for ip in ${SERVERS_EXTERNAL_DO[@]} ; do
-  ssh-keygen -f ~/.ssh/known_hosts -R $ip
-done
+echo Remove host key entry in ~/.ssh/known_hosts...
+ssh-keygen -f ~/.ssh/known_hosts -R $PUBLICIP
 
-SERVERS_INTERNAL="${SERVERS_INTERNAL_DO[@]}"
-SERVERS_EXTERNAL="${SERVERS_EXTERNAL_DO[@]}"
-SERVERS_IDS="${SERVERS_IDS_DO[@]}"
+SERVERS_INTERNAL="${SERVERS_INTERNAL_VCLOUD[@]}"
+SERVERS_EXTERNAL="$PUBLICIP"
+SERVERS_VMS="${SERVERS_VMS_VCLOUD[@]}"
+SERVERS_VAPPS="${SERVERS_VAPP_VCLOUD[@]}"
+SERVERS_PORTS="${SERVERS_PORTS_VCLOUD[@]}"
 
 # Write data to file:
 echo > $OUTPUT/clusterinfo.sh "SERVERS_INTERNAL=\"$SERVERS_INTERNAL\""
 echo >>$OUTPUT/clusterinfo.sh "SERVERS_EXTERNAL=\"$SERVERS_EXTERNAL\""
-echo >>$OUTPUT/clusterinfo.sh "SERVERS_IDS=\"$SERVERS_IDS\""
+echo >>$OUTPUT/clusterinfo.sh "SERVERS_PORTS=\"$SERVERS_PORTS\""
+echo >>$OUTPUT/clusterinfo.sh "SERVERS_VMS=\"$SERVERS_VMS\""
+echo >>$OUTPUT/clusterinfo.sh "SERVERS_VAPPS=\"$SERVERS_VAPPS\""
 echo >>$OUTPUT/clusterinfo.sh "SSH_USER=\"$SSH_USER\""
 echo >>$OUTPUT/clusterinfo.sh "SSH_CMD=\"$SSH_CMD\""
 echo >>$OUTPUT/clusterinfo.sh "SSH_SUFFIX=\"$SSH_SUFFIX\""
@@ -809,13 +793,17 @@ echo >>$OUTPUT/clusterinfo.sh "PREFIX=\"$PREFIX\""
 # Export needed variables
 export SERVERS_INTERNAL
 export SERVERS_EXTERNAL
-export SERVERS_IDS
-export SSH_USER="core"
+export SERVERS_VMS
+export SERVERS_VAPPS
+export SSH_USER="ubuntu"
 export SSH_CMD="ssh"
-export SSH_SUFFIX="-i $HOME/.ssh/arangodb_do_key -l $SSH_USER"
+export SSH_SUFFIX="-i $DEFAULT_KEY_PATH -l $SSH_USER -p PORTS" #TODO get correct port for machine, because different for every machine
 
-# Wait for DO instances
+sleep 5
 
-sleep 10
+#TODO wait for SSH?
+#login then via: ssh -i 'keyfile' ubuntu@'PUBLICIP' -p 'machine_port'
+#Example: ssh -i vCloud/arangodb-test-14344-vcloud-ssh-key ubuntu@92.246.245.8 -p 401
 
-startArangoDBClusterWithDocker
+#TODO ENABLE DOCKER MAGIC
+#startArangoDBClusterWithDocker

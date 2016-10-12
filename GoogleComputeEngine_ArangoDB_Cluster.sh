@@ -3,7 +3,7 @@
 # This script is provided as-is, no warrenty is provided or implied.
 # The author is NOT responsible for any damages or data loss that may occur through the use of this script.
 #
-# This function starts a ArangoDB cluster by just using docker
+# This function starts an ArangoDB cluster by just using docker
 #
 # Prerequisites:
 # The following environment variables are used:
@@ -19,17 +19,25 @@
 #                      quotes [default: "-oStrictHostKeyChecking no"]
 #   SSH_USER         : user name on remote machine [default "core"]
 #   SSH_SUFFIX       : suffix for ssh command [default ""].
-#   NRDBSERVERS      : is always set to the length of SERVERS_EXTERNAL
+#   NRDBSERVERS      : is always set to the length of SERVERS_EXTERNAL if
+#                      not specified
 #   NRCOORDINATORS   : default: $NRDBSERVERS, can be less, at least 1
 #   PORT_DBSERVER    : default: 8629
 #   PORT_COORDINATOR : default: 8529
+#   PORT_REPLICA     : default: 8630
 #   DBSERVER_DATA    : default: "/home/$SSH_USER/dbserver"
 #   COORDINATOR_DATA : default: "/home/$SSH_USER/coordinator"
 #   DBSERVER_LOGS    : default: "/home/$SSH_USER/dbserver_logs"
 #   COORDINATOR_LOGS : default: "/home/$SSH_USER/coordinator_logs"
+#   REPLICA_DATA     : default: "/home/$SSH_USER/replica"
+#   REPLICA_LOGS     : default: "/home/$SSH_USER/replica_logs"
 #   AGENCY_DIR       : default: /home/$SSH_USER/agency"
 #   DBSERVER_ARGS    : default: ""
 #   COORDINATOR_ARGS : default: ""
+#   REPLICA_ARGS     : default: ""
+#   REPLICAS         : default : "", if non-empty, one asynchronous replica
+#                      is started for each DBserver, it resides on the "next"
+#                      machine
 
 # There will be one DBserver on each machine and at most one coordinator.
 # There will be one agency running on the first machine.
@@ -41,7 +49,7 @@
 
 startArangoDBClusterWithDocker() {
 
-    DOCKER_IMAGE_NAME=neunhoef/arangodb_cluster:latest
+    DOCKER_IMAGE_NAME=m0ppers/arangodb:3.0
 
     # Two docker images are needed: 
     #  microbox/etcd for the agency and
@@ -74,10 +82,12 @@ startArangoDBClusterWithDocker() {
     fi
     echo SERVERS_INTERNAL: ${SERVERS_INTERNAL_ARR[*]}
 
-    NRDBSERVERS=${#SERVERS_EXTERNAL_ARR[*]}
+    if [ -z "$NRDBSERVERS" ] ; then
+        NRDBSERVERS=${#SERVERS_EXTERNAL_ARR[*]}
+    fi
     LASTDBSERVER=`expr $NRDBSERVERS - 1`
-
     echo Number of DBServers: $NRDBSERVERS
+
     if [ -z "$NRCOORDINATORS" ] ; then
         NRCOORDINATORS=$NRDBSERVERS
     fi
@@ -109,6 +119,27 @@ startArangoDBClusterWithDocker() {
     fi
     echo PORT_COORDINATOR=$PORT_COORDINATOR
 
+    if [ -z "$PORT_REPLICA" ] ; then
+      PORT_REPLICA=8630
+    fi
+    echo PORT_REPLICA=$PORT_REPLICA
+
+    i=$NRDBSERVERS
+    if [ $i -ge ${#SERVERS_INTERNAL_ARR[*]} ] ; then
+        i=0
+    fi
+    COORDINATOR_MACHINES="$i"
+    FIRST_COORDINATOR=$i
+    for j in `seq 1 $LASTCOORDINATOR` ; do
+        i=`expr $i + 1`
+        if [ $i -ge ${#SERVERS_INTERNAL_ARR[*]} ] ; then
+            i=0
+        fi
+        COORDINATOR_MACHINES="$COORDINATOR_MACHINES $i"
+    done
+    echo COORDINATOR_MACHINES:$COORDINATOR_MACHINES
+    echo FIRST_COORDINATOR: $FIRST_COORDINATOR
+
     if [ -z "$DBSERVER_DATA" ] ; then
       DBSERVER_DATA=/home/$SSH_USER/dbserver
     fi
@@ -118,6 +149,16 @@ startArangoDBClusterWithDocker() {
       DBSERVER_LOGS=/home/$SSH_USER/dbserver_logs
     fi
     echo DBSERVER_LOGS=$DBSERVER_LOGS
+
+    if [ -z "$REPLICA_DATA" ] ; then
+      REPLICA_DATA=/home/$SSH_USER/replica
+    fi
+    echo REPLICA_DATA=$REPLICA_DATA
+
+    if [ -z "$REPLICA_LOGS" ] ; then
+      REPLICA_LOGS=/home/$SSH_USER/replica_logs
+    fi
+    echo REPLICA_LOGS=$REPLICA_LOGS
 
     if [ -z "$AGENCY_DIR" ] ; then
       AGENCY_DIR=/home/$SSH_USER/agency
@@ -137,60 +178,71 @@ startArangoDBClusterWithDocker() {
     echo Creating directories on servers. This may take some time. Please wait.
     $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[0]} $SSH_SUFFIX mkdir $AGENCY_DIR >/dev/null 2>&1 &
     for i in `seq 0 $LASTDBSERVER` ; do
-      $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[$i]} $SSH_SUFFIX mkdir $DBSERVER_DATA $DBSERVER_LOGS >/dev/null 2>&1 &
+        $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[$i]} $SSH_SUFFIX mkdir $DBSERVER_DATA $DBSERVER_LOGS >/dev/null 2>&1 &
     done
-    for i in `seq 0 $LASTCOORDINATOR` ; do
-      $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[$i]} $SSH_SUFFIX mkdir $COORDINATOR_DATA $COORDINATOR_LOGS >/dev/null 2>&1 &
+    for i in $COORDINATOR_MACHINES ; do
+        $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[$i]} $SSH_SUFFIX mkdir $COORDINATOR_DATA $COORDINATOR_LOGS >/dev/null 2>&1 &
     done
+    if [ ! -z "$REPLICAS" ] ; then
+        for i in `seq 0 $LASTDBSERVER` ; do
+            j=`expr $i + 1`
+            if [ $j -gt $LASTDBSERVER ] ; then
+                j=0
+            fi
+            $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[$j]} $SSH_SUFFIX mkdir $REPLICA_DATA $REPLICA_LOGS >/dev/null 2>&1 &
+        done
+    fi
 
     wait
 
     echo Starting agency...
-    $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[0]} $SSH_SUFFIX "docker run --detach=true -p 4001:4001 -p 7001:7001 --name=agency -e "ETCD_NONO_WAL_SYNC=1" -v $AGENCY_DIR:/data ${DOCKER_IMAGE_NAME} /usr/lib/arangodb/etcd-arango --data-dir /data --listen-client-urls "http://0.0.0.0:4001" --listen-peer-urls "http://0.0.0.0:7001" >/home/$SSH_USER/agency.log"
+    until $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[0]} $SSH_SUFFIX "docker run --detach=true -e ARANGO_NO_AUTH=1 -p 4001:8529 --name=agency -v $AGENCY_DIR:/var/lib/arangodb3 ${DOCKER_IMAGE_NAME} --agency.id 0 --agency.size 1 --javascript.v8-contexts 2 --agency.supervision true"
+    do
+        echo "Error in remote docker run, retrying..."
+    done
 
     sleep 1
-    echo Initializing agency...
-    $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[0]} $SSH_SUFFIX "docker run --link=agency:agency --rm ${DOCKER_IMAGE_NAME} arangosh --javascript.execute /scripts/init_agency.js > /home/$SSH_USER/init_agency.log"
-    echo Starting discovery...
-    $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[0]} $SSH_SUFFIX "docker run --detach=true --link=agency:agency --name discovery ${DOCKER_IMAGE_NAME} arangosh --javascript.execute scripts/discover.js > /home/$SSH_USER/discovery.log"
 
     start_dbserver () {
         i=$1
         echo Starting DBserver on ${SERVERS_EXTERNAL_ARR[$i]}:$PORT_DBSERVER
 
-        $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[$i]} $SSH_SUFFIX \
-        docker run --detach=true -v $DBSERVER_DATA:/data \
-         -v $DBSERVER_LOGS:/logs --net=host \
-         --name=dbserver$PORT_DBSERVER ${DOCKER_IMAGE_NAME} \
-          arangod --database.directory /data \
-          --frontend-version-check false \
-          --cluster.agency-endpoint tcp://${SERVERS_INTERNAL_ARR[0]}:4001 \
-          --cluster.my-address tcp://${SERVERS_INTERNAL_ARR[$i]}:$PORT_DBSERVER \
-          --server.endpoint tcp://0.0.0.0:$PORT_DBSERVER \
-          --cluster.my-local-info dbserver:${SERVERS_INTERNAL_ARR[$i]}:$PORT_DBSERVER \
-          --log.file /logs/$PORT_DBSERVER.log \
-          $DBSERVER_ARGS \
-          >/dev/null
+        until $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[$i]} $SSH_SUFFIX \
+            docker run -p $PORT_DBSERVER:8529 --detach=true -e ARANGO_NO_AUTH=1 -v $DBSERVER_DATA:/var/lib/arangodb3 \
+             --name=dbserver$PORT_DBSERVER ${DOCKER_IMAGE_NAME} \
+              arangod --cluster.agency-endpoint tcp://${SERVERS_INTERNAL_ARR[0]}:4001 \
+              --cluster.my-address tcp://${SERVERS_INTERNAL_ARR[$i]}:$PORT_DBSERVER \
+              --cluster.my-local-info dbserver:${SERVERS_INTERNAL_ARR[$i]}:$PORT_DBSERVER \
+              --cluster.my-role PRIMARY \
+              --scheduler.threads 3 \
+              --server.threads 5 \
+              --javascript.v8-contexts 6 \
+              $DBSERVER_ARGS
+        do
+            echo "Error in remote docker run, retrying..."
+        done
     }
 
     start_coordinator () {
         i=$1
         echo Starting Coordinator on ${SERVERS_EXTERNAL_ARR[$i]}:$PORT_COORDINATOR
 
-        $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[$i]} $SSH_SUFFIX \
-         docker run --detach=true -v $COORDINATOR_DATA:/data \
-            -v $COORDINATOR_LOGS:/logs --net=host \
-            --name=coordinator$PORT_COORDINATOR \
-            ${DOCKER_IMAGE_NAME} \
-          arangod --database.directory /data \
-           --cluster.agency-endpoint tcp://${SERVERS_INTERNAL_ARR[0]}:4001 \
-           --cluster.my-address tcp://${SERVERS_INTERNAL_ARR[$i]}:$PORT_COORDINATOR \
-           --server.endpoint tcp://0.0.0.0:$PORT_COORDINATOR \
-           --cluster.my-local-info \
-                     coordinator:${SERVERS_INTERNAL_ARR[$i]}:$PORT_COORDINATOR \
-           --log.file /logs/$PORT_COORDINATOR.log \
-           $COORDINATOR_ARGS \
-           >/dev/null
+        until $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[$i]} $SSH_SUFFIX \
+            docker run -p $PORT_COORDINATOR:8529 --detach=true -e ARANGO_NO_AUTH=1 -v $COORDINATOR_DATA:/var/lib/arangodb3 \
+                --name=coordinator$PORT_COORDINATOR \
+                ${DOCKER_IMAGE_NAME} \
+              arangod --cluster.agency-endpoint tcp://${SERVERS_INTERNAL_ARR[0]}:4001 \
+               --cluster.my-address tcp://${SERVERS_INTERNAL_ARR[$i]}:$PORT_COORDINATOR \
+               --cluster.my-local-info \
+                         coordinator:${SERVERS_INTERNAL_ARR[$i]}:$PORT_COORDINATOR \
+               --cluster.my-role COORDINATOR \
+               --scheduler.threads 4 \
+               --javascript.v8-contexts 11 \
+               --server.threads 10 \
+               $COORDINATOR_ARGS
+        do
+            echo "Error in remote docker run, retrying..."
+        done
     }
 
     for i in `seq 0 $LASTDBSERVER` ; do
@@ -199,7 +251,7 @@ startArangoDBClusterWithDocker() {
 
     wait
 
-    for i in `seq 0 $LASTCOORDINATOR` ; do
+    for i in $COORDINATOR_MACHINES ; do
         start_coordinator $i &
     done
 
@@ -220,44 +272,72 @@ startArangoDBClusterWithDocker() {
             fi
         done
     }
+    
+    DBSERVER_IDS=()
+    for i in `seq 0 $LASTDBSERVER` ; do
+        testServer ${SERVERS_EXTERNAL_ARR[$i]}:$PORT_DBSERVER
+        DBSERVER_IDS[$i]=$(curl http://"${SERVERS_EXTERNAL_ARR[$i]}:$PORT_DBSERVER"/_admin/server/id)
+    done
 
-    #for i in `seq 0 $LASTDBSERVER` ; do
-    #    testServer ${SERVERS_EXTERNAL_ARR[$i]}:$PORT_DBSERVER
-    #done
-
-    for i in `seq 0 $LASTCOORDINATOR` ; do
+    for i in $COORDINATOR_MACHINES ; do
         testServer ${SERVERS_EXTERNAL_ARR[$i]}:$PORT_COORDINATOR
     done
+    
+    if [ ! -z "$REPLICAS" ] ; then
+        start_replica () {
+            i=$1
+            j=`expr $i + 1`
+            ID="Secondary$j"
+            if [ $j -gt $LASTDBSERVER ] ; then
+                j=0
+            fi
+            echo Starting asynchronous replica for
+            echo "  ${SERVERS_EXTERNAL_ARR[$i]}:$PORT_DBSERVER on ${SERVERS_EXTERNAL_ARR[$j]}:$PORT_REPLICA"
+            
+            while true; do
+              curl -f -X PUT --data "{\"primary\": \"${DBSERVER_IDS[$i]}\", \"oldSecondary\": \"none\", \"newSecondary\": \"${ID}\"}" -H "Content-Type: application/json" "${SERVERS_EXTERNAL_ARR[$i]}:$PORT_COORDINATOR"/_admin/cluster/replaceSecondary
+              if [ "$?" == "0" ]; then
+                break
+              fi
+              echo "Failed registering secondary...Retrying..."
+              sleep 1
+            done
 
-    echo Bootstrapping DBServers...
-    curl -s -X POST "http://${SERVERS_EXTERNAL_ARR[0]}:$PORT_COORDINATOR/_admin/cluster/bootstrapDbServers" \
-         -d '{"isRelaunch":false}' >/dev/null 2>&1
+            until $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[$j]} $SSH_SUFFIX \
+                docker run -p 8529:$PORT_REPLICA --detach=true -e ARANGO_NO_AUTH=1 -v $REPLICA_DATA:/var/lib/arangodb3 \
+                 --name=replica$PORT_REPLICA ${DOCKER_IMAGE_NAME} \
+                  arangod \
+                  --cluster.my-id "$ID" \
+                  --cluster.my-role SECONDARY \
+                  --scheduler.threads 3 \
+                  --server.threads 5 \
+                  --javascript.v8-contexts 6 \
+                  $REPLICA_ARGS
+            do
+                echo "Error in remote docker run, retrying..."
+            done
+        }
 
-    echo Running DB upgrade on cluster...
-    curl -s -X POST "http://${SERVERS_EXTERNAL_ARR[0]}:$PORT_COORDINATOR/_admin/cluster/upgradeClusterDatabase" \
-         -d '{"isRelaunch":false}' >/dev/null 2>&1
+        for i in `seq 0 $LASTDBSERVER` ; do
+            start_replica $i
+        done
 
-    echo Bootstrapping Coordinators...
-    for i in `seq 0 $LASTCOORDINATOR` ; do
-        echo Doing ${SERVERS_EXTERNAL_ARR[$i]}:$PORT_COORDINATOR
-        curl -s -X POST "http://${SERVERS_EXTERNAL_ARR[$i]}:$PORT_COORDINATOR/_admin/cluster/bootstrapCoordinator" \
-             -d '{"isRelaunch":false}' >/dev/null 2>&1 &
-    done
-
-    wait
+        echo Waiting 10 seconds till replicas are up and running...
+        sleep 10
+    fi
 
     echo ""
-    echo "================================================================================================"
+    echo "=============================================================================="
     echo "Done, your cluster is ready."
-    echo "================================================================================================"
+    echo "=============================================================================="
     echo ""
     echo "Frontends available at:"
-    for i in `seq 0 $LASTCOORDINATOR` ; do
+    for i in $COORDINATOR_MACHINES ; do
         echo "   http://${SERVERS_EXTERNAL_ARR[$i]}:$PORT_COORDINATOR"
     done
     echo ""
     echo "Access with docker, using arangosh:"
-    for i in `seq 0 $LASTCOORDINATOR` ; do
+    for i in $COORDINATOR_MACHINES ; do
         echo "   docker run -it --rm --net=host ${DOCKER_IMAGE_NAME} arangosh --server.endpoint tcp://${SERVERS_EXTERNAL_ARR[$i]}:$PORT_COORDINATOR"
     done
     echo ""
@@ -273,15 +353,20 @@ startArangoDBClusterWithDocker() {
 #   PROJECT : project id of your designated project (e.g. -p "project_id");
 #
 # Optional prerequisites:
-#   ZONE    : size of the server (e.g. -z europe-west1-b)
-#   SIZE    : size/machine-type of the instance (e.g. -m n1-standard-2)
-#   NUMBER  : count of machines to create (e.g. -n 3)
-#   OUTPUT  : local output log folder (e.g. -d /my/directory)
+#   ZONE           : size of the server (e.g. -z europe-west1-b)
+#   MACHINE_TYPE   : size/machine-type of the instance (e.g. -m n1-standard-4)
+#   MACHINE_TYPE_C : size/machine-type of the coordinator instances
+#                    (e.g. -c n1-highcpu.8)
+#   NUMBER         : count of machines to create (e.g. -n 3)
+#   OUTPUT         : local output log folder (e.g. -d /my/directory)
+#   NRDBSERVERS    : number of DBservers, defaults to $NUMBER
+#   NRCOORDINATORS : number of coordinators, defaults to $NUMBER
 
 trap "kill 0" SIGINT
 
 ZONE="europe-west1-b"
-MACHINE_TYPE="n1-standard-2"
+MACHINE_TYPE="n1-standard-4"
+MACHINE_TYPE_C="n1-highcpu-8"
 NUMBER="3"
 OUTPUT="gce"
 PROJECT=""
@@ -336,7 +421,7 @@ GoogleComputeEngineDestroyMachines() {
 
 REMOVE=0
 
-while getopts ":z:m:n:d:p:s:hr" opt; do
+while getopts ":z:m:c:n:d:p:s:hr" opt; do
   case $opt in
     h)
        cat <<EOT
@@ -350,10 +435,14 @@ The following environment variables are used:
   PROJECT : project id of your designated project (e.g. -p "project_id");
 
 Optional prerequisites:
-  ZONE    : size of the server (e.g. -z europe-west1-b)
-  SIZE    : size/machine-type of the instance (e.g. -m n1-standard-2)
-  NUMBER  : count of machines to create (e.g. -n 3)
-  OUTPUT  : local output log folder (e.g. -d /my/directory)
+  ZONE           : size of the server (e.g. -z europe-west1-b)
+  MACHINE_TYPE   : size/machine-type of the instance (e.g. -m n1-standard-4)
+  MACHINE_TYPE_C : size/machine-type of the coordinator instances
+                   (e.g. -c n1-highcpu-8)
+  NUMBER         : count of machines to create (e.g. -n 3)
+  OUTPUT         : local output log folder (e.g. -d /my/directory)
+  NRDBSERVERS    : number of DBservers (defaults to $NUMBER)
+  NRCOORDINATORS : number of coordinators (defaults to $NUMBER)
 EOT
       exit 0
       ;;
@@ -362,6 +451,9 @@ EOT
       ;;
     m)
       MACHINE_TYPE="$OPTARG"
+      ;;
+    c)
+      MACHINE_TYPE_C="$OPTARG"
       ;;
     n)
       NUMBER="$OPTARG"
@@ -443,9 +535,19 @@ if [ "$REMOVE" == "1" ] ; then
   exit 1
 fi
 
+if [ -z "$NRDBSERVERS" ] ; then
+    export NRDBSERVERS=$NUMBER
+fi
+if [ -z "$NRCOORDINATORS" ] ; then
+    export NRCOORDINATORS=$NUMBER
+fi
+
 echo "MACHINE_TYPE: $MACHINE_TYPE"
+echo "MACHINE_TYPE_C: $MACHINE_TYPE_C"
 echo "NUMBER OF MACHINES: $NUMBER"
 echo "MACHINE PREFIX: $PREFIX"
+echo "NRDBSERVERS: $NRDBSERVERS"
+echo "NRCOORDINATORS: $NRCOORDINATORS"
 
 mkdir -p "$OUTPUT/temp"
 
@@ -474,7 +576,7 @@ if [ -n "${SSH_AUTH_SOCK}" ]; then
 fi
 
 #add firewall rule for arangodb-test tag
-gcloud compute firewall-rules create "${PREFIX}firewall" --allow tcp:8529 --target-tags "${PREFIX}tag"
+gcloud compute firewall-rules create "${PREFIX}firewall" --allow tcp:8529,tcp:8629,tcp:8630 --target-tags "${PREFIX}tag"
 
 if [ $? -eq 0 ]; then
   echo
@@ -485,9 +587,16 @@ fi
 
 function createMachine () {
   echo "creating machine $PREFIX$1"
-  INSTANCE=`gcloud compute instances create --image coreos --zone "$ZONE" \
-            --tags "${PREFIX}tag" --machine-type "$MACHINE_TYPE" "$PREFIX$1" \
-            --local-ssd device-name=local-ssd | grep "^$PREFIX"`
+  if [ $1 -le $NRDBSERVERS ] ; then
+      INSTANCE=`gcloud compute instances create --image coreos --zone "$ZONE" \
+                --tags "${PREFIX}tag" --machine-type "$MACHINE_TYPE" \
+                "$PREFIX$1" --local-ssd device-name=local-ssd \
+                | grep "^$PREFIX"`
+  else
+      INSTANCE=`gcloud compute instances create --image coreos --zone "$ZONE" \
+                --tags "${PREFIX}tag" --machine-type "$MACHINE_TYPE_C" \
+                "$PREFIX$1" | grep "^$PREFIX"`
+  fi
 
   a=`echo $INSTANCE | awk '{print $4}'`
   b=`echo $INSTANCE | awk '{print $5}'`
@@ -547,6 +656,11 @@ echo Internal IPs: ${SERVERS_INTERNAL_GCE[@]}
 echo External IPs: ${SERVERS_EXTERNAL_GCE[@]}
 echo IDs         : ${SERVERS_IDS_GCE[@]}
 
+echo Remove host key entries in ~/.ssh/known_hosts...
+for ip in ${SERVERS_EXTERNAL_GCE[@]} ; do
+  ssh-keygen -f ~/.ssh/known_hosts -R $ip
+done
+
 # Prepare local SSD drives:
 
 # First we need two scripts:
@@ -575,7 +689,9 @@ EOF
 chmod 755 $OUTPUT/mountSSD.sh
 
 echo Preparing local SSD driver...
-for ip in ${SERVERS_EXTERNAL_GCE[@]} ; do
+LASTDBSERVER=`expr $NRDBSERVERS - 1`
+for i in `seq 0 $LASTDBSERVER` ; do
+    ip=${SERVERS_EXTERNAL_GCE[$i]}
     echo Preparing local SSD drives for $ip...
     scp -o"StrictHostKeyChecking no" $OUTPUT/prepareSSD.sh core@$ip:
     scp -o"StrictHostKeyChecking no" $OUTPUT/mountSSD.sh core@$ip:
@@ -604,7 +720,7 @@ export SERVERS_EXTERNAL
 export SERVERS_IDS
 export SSH_USER="core"
 export SSH_CMD="ssh"
-export SSH_SUFFIX="-i $DEFAULT_KEY_PATH -l $SSH_USER"
+export SSH_SUFFIX=""
 export ZONE
 export PROJECT
 export DBSERVER_DATA=/data/dbserver
