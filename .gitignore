@@ -6,3 +6,4 @@ digital_ocean/
 azure/
 gce/
 aws/
+*.swp
