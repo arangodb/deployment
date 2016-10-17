@@ -48,7 +48,7 @@
 
 startArangoDBClusterWithDocker() {
 
-    DOCKER_IMAGE_NAME=m0ppers/arangodb:3.0
+    DOCKER_IMAGE_NAME=arangodb/arangodb-preview
 
     # Two docker images are needed: 
     #  microbox/etcd for the agency and
@@ -194,8 +194,8 @@ startArangoDBClusterWithDocker() {
 
     wait
 
-    echo Starting agency...
-    until $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[0]} $SSH_SUFFIX "docker run --detach=true -e ARANGO_NO_AUTH=1 -p 4001:8529 --name=agency -v $AGENCY_DIR:/var/lib/arangodb3 ${DOCKER_IMAGE_NAME} --agency.id 0 --agency.size 1 --javascript.v8-contexts 2 --agency.supervision true"
+    echo "Starting agency... (${SERVERS_INTERNAL_ARR[0]}:4001)"
+    until $SSH_CMD "${SSH_ARGS}" ${SSH_USER}@${SERVERS_EXTERNAL_ARR[0]} $SSH_SUFFIX "docker run --detach=true -e ARANGO_NO_AUTH=1 -p 4001:8529 --name=agency -v $AGENCY_DIR:/var/lib/arangodb3 ${DOCKER_IMAGE_NAME} --agency.size 1 --javascript.v8-contexts 2 --agency.supervision true --agency.activate true --agency.endpoint tcp://${SERVERS_INTERNAL_ARR[0]}:4001 --agency.my-address tcp://${SERVERS_INTERNAL_ARR[0]}:4001"
     do
         echo "Error in remote docker run, retrying..."
     done
@@ -210,6 +210,7 @@ startArangoDBClusterWithDocker() {
             docker run -p $PORT_DBSERVER:8529 --detach=true -e ARANGO_NO_AUTH=1 -v $DBSERVER_DATA:/var/lib/arangodb3 \
              --name=dbserver$PORT_DBSERVER ${DOCKER_IMAGE_NAME} \
               arangod --cluster.agency-endpoint tcp://${SERVERS_INTERNAL_ARR[0]}:4001 \
+              --agency.endpoint tcp://${SERVERS_INTERNAL_ARR[0]}:4001 \
               --cluster.my-address tcp://${SERVERS_INTERNAL_ARR[$i]}:$PORT_DBSERVER \
               --cluster.my-local-info dbserver:${SERVERS_INTERNAL_ARR[$i]}:$PORT_DBSERVER \
               --cluster.my-role PRIMARY \
@@ -232,6 +233,7 @@ startArangoDBClusterWithDocker() {
                 ${DOCKER_IMAGE_NAME} \
               arangod --cluster.agency-endpoint tcp://${SERVERS_INTERNAL_ARR[0]}:4001 \
                --cluster.my-address tcp://${SERVERS_INTERNAL_ARR[$i]}:$PORT_COORDINATOR \
+               --agency.endpoint tcp://${SERVERS_INTERNAL_ARR[0]}:4001 \
                --cluster.my-local-info \
                          coordinator:${SERVERS_INTERNAL_ARR[$i]}:$PORT_COORDINATOR \
                --cluster.my-role COORDINATOR \
