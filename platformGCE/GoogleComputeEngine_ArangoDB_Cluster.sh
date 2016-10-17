@@ -249,12 +249,12 @@ fi
 function createMachine () {
   echo "creating machine $PREFIX$1"
   if [ $1 -le $NRDBSERVERS ] ; then
-      INSTANCE=`gcloud compute instances create --image coreos --zone "$ZONE" \
+      INSTANCE=`gcloud compute instances create --image-family=coreos-stable --image-project=coreos-cloud --zone "$ZONE" \
                 --tags "${PREFIX}tag" --machine-type "$MACHINE_TYPE" \
                 "$PREFIX$1" --local-ssd device-name=local-ssd \
                 | grep "^$PREFIX"`
   else
-      INSTANCE=`gcloud compute instances create --image coreos --zone "$ZONE" \
+      INSTANCE=`gcloud compute instances create --image-family=coreos-stable --image-project=coreos-cloud --zone "$ZONE" \
                 --tags "${PREFIX}tag" --machine-type "$MACHINE_TYPE_C" \
                 "$PREFIX$1" | grep "^$PREFIX"`
   fi

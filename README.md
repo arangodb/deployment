@@ -43,13 +43,13 @@ and restart your shell or terminal. Then use gcloud tool for authentication:
 ```sh
 $ gcloud auth login
 ```
-... set your proect-id:
+... set your project-id:
 ```sh
 $ gcloud config set project "your-project-id"
 ```
 ... and set your zone: 
 ```sh
-$ gcloud config set zone "your-desired-zone" 
+$ gcloud config set compute/zone "your-desired-zone" 
 ```
 Please use this command to list all available zones:
 ```sh
