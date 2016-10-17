@@ -10,16 +10,7 @@
 #   NUMBER  : count of machines to create (e.g. -n 3)
 #   OUTPUT  : local output log folder (e.g. -d /my/directory)
 
-if [ platformAWS/AmazonWebServices_ArangoDB_Cluster.sh -nt ./AmazonWebServices_ArangoDB_Cluster.sh ] || [ Docker/ArangoDBClusterWithDocker.sh -nt ./AmazonWebServices_ArangoDB_Cluster.sh ] ; then
-  echo 'You almost certainly have forgotten to say "make" to assemble this'
-  echo 'script from its parts in subdirectories. Stopping.'
-  exit 1
-fi
-
 trap "kill 0" SIGINT
-
-#CoreOS AWS Image List
-#https://coreos.com/docs/running-coreos/cloud-providers/ec2/
 
 MACHINE_TYPE="t1.medium"
 NUMBER="3"
@@ -132,7 +123,7 @@ done
 
 PREFIX="arangodb-test-$$-"
 echo "OUTPUT DIRECTORY: $OUTPUT"
-echo "ZONE: $ZONE"
+echo "ZONE: $zone"
 echo "PROJECT: $PROJECT"
 
 DEFAULT_KEY_PATH="$HOME/.ssh/${PREFIX}aws-ssh-key"
@@ -147,47 +138,21 @@ else
   ZONE=$zone
 fi
 
-#We have to keep all ami's up to date
-# Current Version: CoreOS 607.0.0
-# mop: updated 2016-02-08 CoreOS CoreOS 835.12.0
-# URL: https://coreos.com/os/docs/latest/booting-on-ec2.html
+# Function to get latest core os ami ids (stable channel)
+# URL: https://coreos.com/dist/aws/aws-stable.json
 
-if [ "$zone" == "eu-central-1" ]; then
-  IMAGE="ami-e8ebf384"
-fi
+echo "Your aws zone is: $ZONE"
+echo "Searching ami id of latest core os version..."
 
-if [ "$zone" == "ap-northeast-1" ]; then
-  IMAGE="ami-673b0109"
-fi
+function jsonval {
+  temp=`echo $json | sed 's/\\\\\//\//g' | sed 's/[{}]//g' | awk -v k="text" '{n=split($0,a,","); for (i=1; i<=n; i++) print a[i]}' | sed 's/\"\:\"/\|/g' | sed 's/[\,]/ /g' | sed 's/\"//g' | grep -w $ZONE`
+  echo ${temp##*|}
+}
 
-if [ "$zone" == "sa-east-1" ]; then
-  IMAGE="ami-6c1a9a00"
-fi
-
-if [ "$zone" == "ap-southeast-2" ]; then
-  IMAGE="ami-d0a783b3"
-fi
-
-if [ "$zone" == "ap-southeast-1" ]; then
-  IMAGE="ami-4a65aa29"
-fi
-
-if [ "$zone" == "us-east-1" ]; then
-  IMAGE="ami-dfb699b5"
-fi
-
-if [ "$zone" == "us-west-2" ]; then
-  IMAGE="ami-abc82ecb"
-fi
-
-if [ "$zone" == "us-west-1" ]; then
-  IMAGE="ami-4d2d5b2d"
-fi
-
-if [ "$zone" == "eu-west-1" ]; then
-  IMAGE="ami-1461d767"
-fi
-
+json=`curl -s -X GET https://coreos.com/dist/aws/aws-stable.json`
+amiid=`jsonval`
+IMAGE=`echo $amiid | awk {'print $3'}`
+echo "Found image. ID is: $IMAGE"
 
 if test -e "$OUTPUT";  then
   if [ "$REMOVE" == "1" ] ; then
@@ -344,7 +309,7 @@ function setMachineName () {
 function setMachineSecurity () {
   echo "Adding security groups."
   id=`cat "$OUTPUT/temp/IDS$i"`
-  secureid=$(aws ec2 describe-security-groups --output json --group-names ${PREFIX}security | grep GroupId | sed -e "s/.*: \"\([^\"]\+\).*/\1/g")
+  secureid=$(aws ec2 describe-security-groups --output json --group-names ${PREFIX}security | grep GroupId | sed -e 's/.*: "\([^"]*\)"/\1/g')
   aws ec2 modify-instance-attribute --instance-id "$id" --groups "$secureid"
 }
 

@@ -19,12 +19,6 @@
 
 #set -e
 
-if [ platformDO/DigitalOcean_ArangoDB_Cluster.sh -nt ./DigitalOcean_ArangoDB_Cluster.sh ] || [ Docker/ArangoDBClusterWithDocker.sh -nt ./DigitalOcean_ArangoDB_Cluster.sh ] ; then
-  echo 'You almost certainly have forgotten to say "make" to assemble this'
-  echo 'script from its parts in subdirectories. Stopping.'
-  exit 1
-fi
-
 trap "kill 0" SIGINT
 set -u
 
@@ -198,7 +192,7 @@ if test -z "$SSHID";  then
 
   then
     echo "No ArangoDB SSH-Key found. Generating a new one.!"
-    ssh-keygen -t dsa -f $OUTPUT/$SSH_KEY -C "arangodb@arangodb.com"
+    ssh-keygen -t rsa -f $OUTPUT/$SSH_KEY -C "arangodb@arangodb.com"
 
     if [ $? -eq 0 ]; then
       echo OK

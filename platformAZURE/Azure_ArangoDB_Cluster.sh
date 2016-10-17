@@ -10,19 +10,13 @@
 #   OUTPUT  : local output log folder (e.g. -d /my/directory)
 #   SSH     : path to your already on Azure deployed ssh key (e.g. -s /my/directory/mykey)
 
-if [ platformAZURE/Azure_ArangoDB_Cluster.sh -nt ./Azure_ArangoDB_Cluster.sh ] || [ Docker/ArangoDBClusterWithDocker.sh -nt ./Azure_ArangoDB_Cluster.sh ] ; then
-  echo 'You almost certainly have forgotten to say "make" to assemble this'
-  echo 'script from its parts in subdirectories. Stopping.'
-  exit 1
-fi
-
 trap "kill 0" SIGINT
 
-ZONE="West US"
+ZONE="West Europe"
 MACHINE_TYPE="Medium"
 NUMBER="3"
 OUTPUT="azure"
-IMAGE="2b171e93f07c4903bcad35bda10acf22__CoreOS-Stable-607.0.0"
+IMAGE="2b171e93f07c4903bcad35bda10acf22__CoreOS-Stable-835.12.0"
 SSH_KEY_PATH=""
 DEFAULT_KEY_PATH="$OUTPUT/arangodb_azure_key"
 
@@ -171,7 +165,7 @@ then
     DEFAULT_KEY_PATH="$HOME/.ssh/arangodb_azure_key"
   else
     echo "No SSH-Key-Path given. Creating a new SSH-Key."
-    ssh-keygen -t dsa -f "$DEFAULT_KEY_PATH" -C "arangodb@arangodb.com"
+    ssh-keygen -t rsa -f "$DEFAULT_KEY_PATH" -C "arangodb@arangodb.com"
 
 #    openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout "$DEFAULT_KEY_PATH" -out "$DEFAULT_KEY_PATH.pem"
     openssl req -x509 -key "$DEFAULT_KEY_PATH" -nodes -days 365 -newkey rsa:2048 -out "${DEFAULT_KEY_PATH}.pem"

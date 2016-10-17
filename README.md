@@ -43,13 +43,13 @@ and restart your shell or terminal. Then use gcloud tool for authentication:
 ```sh
 $ gcloud auth login
 ```
-... set your project-id:
+... set your proect-id:
 ```sh
 $ gcloud config set project "your-project-id"
 ```
 ... and set your zone: 
 ```sh
-$ gcloud config set compute/zone "your-desired-zone" 
+$ gcloud config set zone "your-desired-zone" 
 ```
 Please use this command to list all available zones:
 ```sh
@@ -91,7 +91,7 @@ You will be asked for:
 
 ##### Create a cluster:
 ```sh
-$ wget https://raw.githubusercontent.com/ArangoDB/deployment/publish/AmazonWebServices_ArangoDB_Cluster.sh
+$ wget wget https://raw.githubusercontent.com/ArangoDB/deployment/publish/AmazonWebServices_ArangoDB_Cluster.sh
 $ chmod 755 AmazonWebServices_ArangoDB_Cluster.sh
 $ ./AmazonWebServices_ArangoDB_Cluster.sh
 ```

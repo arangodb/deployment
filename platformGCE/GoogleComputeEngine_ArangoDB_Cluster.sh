@@ -17,12 +17,6 @@
 #   NRDBSERVERS    : number of DBservers, defaults to $NUMBER
 #   NRCOORDINATORS : number of coordinators, defaults to $NUMBER
 
-if [ platformGCE/GoogleComputeEngine_ArangoDB_Cluster.sh -nt ./GoogleComputeEngine_ArangoDB_Cluster.sh ] || [ Docker/ArangoDBClusterWithDocker.sh -nt ./GoogleComputeEngine_ArangoDB_Cluster.sh ] ; then
-  echo 'You almost certainly have forgotten to say "make" to assemble this'
-  echo 'script from its parts in subdirectories. Stopping.'
-  exit 1
-fi
-
 trap "kill 0" SIGINT
 
 ZONE="europe-west1-b"
@@ -249,12 +243,12 @@ fi
 function createMachine () {
   echo "creating machine $PREFIX$1"
   if [ $1 -le $NRDBSERVERS ] ; then
-      INSTANCE=`gcloud compute instances create --image-family=coreos-stable --image-project=coreos-cloud --zone "$ZONE" \
+      INSTANCE=`gcloud compute instances create --image coreos --zone "$ZONE" \
                 --tags "${PREFIX}tag" --machine-type "$MACHINE_TYPE" \
                 "$PREFIX$1" --local-ssd device-name=local-ssd \
                 | grep "^$PREFIX"`
   else
-      INSTANCE=`gcloud compute instances create --image-family=coreos-stable --image-project=coreos-cloud --zone "$ZONE" \
+      INSTANCE=`gcloud compute instances create --image coreos --zone "$ZONE" \
                 --tags "${PREFIX}tag" --machine-type "$MACHINE_TYPE_C" \
                 "$PREFIX$1" | grep "^$PREFIX"`
   fi
@@ -381,7 +375,7 @@ export SERVERS_EXTERNAL
 export SERVERS_IDS
 export SSH_USER="core"
 export SSH_CMD="ssh"
-export SSH_SUFFIX="-i $DEFAULT_KEY_PATH -l $SSH_USER"
+export SSH_SUFFIX=""
 export ZONE
 export PROJECT
 export DBSERVER_DATA=/data/dbserver
